@@ -4,205 +4,293 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>THEO DÕI TRỪ NỢ NHÀ MÀY &amp; KHO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📗</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>" />
 </head>
 <body>
-  <!-- Excel-like ribbon -->
-  <div class="ribbon">
-    <div class="ribbon-top">
-      <div class="ribbon-title">
-        📗 THEO DÕI TRỪ NỢ NHÀ MÀY &amp; KHO
-        <small>Web · GitHub multi-user</small>
-        <span class="help-chip" id="btnGuide" title="Hướng dẫn token">❓ Hướng dẫn Token</span>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+  <div class="app">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand" style="padding: 4px 4px 8px">
+        <div class="brand-mark">◆</div>
+        <div>
+          <h1 style="font-size:0.95rem">Trừ nợ VT</h1>
+          <p>VIP Control Desk</p>
+        </div>
       </div>
-      <div class="ribbon-actions">
-        <select id="userSelect" title="Chọn user (1–5)"></select>
-        <button class="btn" type="button" id="btnLoad">⟳ Tải GitHub</button>
-        <button class="btn btn-solid" type="button" id="btnSaveGh">☁ Lưu GitHub</button>
-        <button class="btn btn-warn" type="button" id="btnToken">🔑 Token</button>
-        <button class="btn" type="button" id="btnRecalc">Σ Tính lại</button>
-        <button class="btn" type="button" id="btnAdd">＋ Thêm dòng</button>
-        <button class="btn" type="button" id="btnDemo">Demo</button>
-        <button class="btn" type="button" id="btnExport">Export</button>
-        <label class="btn" style="cursor:pointer">
-          Import
-          <input type="file" id="fileImport" accept="application/json,.json" hidden />
-        </label>
+
+      <div class="sidebar-section">
+        <h3>Nhà máy / Sheet</h3>
+        <div class="nav-list" id="sheetNav"></div>
       </div>
-    </div>
-    <div class="ribbon-sub">
-      <label>Chọn Tháng / Năm
-        <input type="number" id="metaMonth" min="1" max="12" /> /
-        <input type="number" id="metaYear" min="2020" max="2100" />
-      </label>
-      <label>Lọc
-        <input type="text" id="filterQ" placeholder="Số phiếu, mã VT, tên…" style="min-width:180px;background:#fff;color:#111;border:1px solid #ccc;border-radius:3px;padding:3px 8px" />
-      </label>
-      <span id="tokenHint"></span>
-      <span>Cập nhật: <strong id="metaUpdated">—</strong></span>
-      <span id="metaCount"></span>
-    </div>
-  </div>
 
-  <div class="sheet-tabs">
-    <button type="button" class="sheet-tab active" data-sheet="PHC">PHC</button>
-    <button type="button" class="sheet-tab" data-sheet="NM LAF">NM LAF</button>
-    <button type="button" class="sheet-tab" data-sheet="NM LVF">NM LVF</button>
-  </div>
+      <div class="sidebar-section">
+        <h3>Tổng quan sheet</h3>
+        <div class="kpi-grid">
+          <div class="kpi"><span>Số dòng</span><b id="kpiRows">0</b></div>
+          <div class="kpi"><span>Số phiếu</span><b id="kpiPhieu">0</b></div>
+          <div class="kpi"><span>Có K</span><b id="kpiK">0</b></div>
+          <div class="kpi"><span>Có L</span><b id="kpiL">0</b></div>
+        </div>
+      </div>
 
-  <div class="status-bar">
-    <span id="statusMsg" class="info">Sẵn sàng.</span>
-  </div>
+      <div class="side-card">
+        <div class="label">User đang làm</div>
+        <div class="value" id="sideUser">—</div>
+      </div>
+      <div class="side-card">
+        <div class="label">Cập nhật gần nhất</div>
+        <div class="value" id="sideUpdated">—</div>
+      </div>
+      <div class="side-card">
+        <div class="label">Token GitHub</div>
+        <div class="value" id="sideToken">Chưa cấu hình</div>
+      </div>
 
-  <div class="workspace">
-    <div class="workbook-title">
-      <div class="meta">File mẫu Excel · tiêu đề cột giữ nguyên</div>
-      <div class="main">THEO DÕI TRỪ NỢ NHÀ MÀY &amp; KHO</div>
-      <div class="right">Chi tiết từng ngày cấp phát thực tế kho &amp; xưởng giao nhận</div>
-    </div>
+      <div class="side-foot">
+        Tiêu đề cột giữ nguyên Excel.<br />
+        Logic VBA: quét lùi AS · M = J−K / J+L
+      </div>
+    </aside>
 
-    <div class="legend">
-      <span><i class="swatch y"></i> QC / K / L (auto)</span>
-      <span><i class="swatch c"></i> So phieu nguon chuyen qua (AU)</span>
-      <span><i class="swatch o"></i> SL còn lại so với QC đóng gói (AT)</span>
-      <span>Sửa trực tiếp ô → Enter · M = J−K (có K) hoặc J+L (có L)</span>
-    </div>
-
-    <div class="grid-wrap">
-      <table class="xl-grid" id="xlGrid">
-        <thead id="gridHead"></thead>
-        <tbody id="gridBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="footer-note">
-    Repo:
-    <a href="https://github.com/mrbit4578/THEO-DOI-TRU-NO-VAT-TU" target="_blank" rel="noopener">mrbit4578/THEO-DOI-TRU-NO-VAT-TU</a>
-    · Data: <code>data/store.json</code>
-  </div>
-
-  <!-- Drawer add/edit -->
-  <div class="drawer-backdrop" id="drawerBackdrop"></div>
-  <aside class="drawer" id="drawer">
-    <header>
-      <span id="drawerTitle">Thêm dòng mới</span>
-      <button type="button" class="btn" id="btnDrawerClose" style="border-color:rgba(255,255,255,.5)">✕</button>
+    <!-- HEADER -->
+    <header class="header">
+      <div class="header-left">
+        <button type="button" class="btn btn-icon" id="btnMenu" title="Menu">☰</button>
+        <div class="brand">
+          <div>
+            <h1>THEO DÕI TRỪ NỢ NHÀ MÀY &amp; KHO</h1>
+            <p>Hệ thống trừ nợ vật tư · multi-user GitHub</p>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <button type="button" class="btn btn-ghost" id="btnGuide">❓ Token</button>
+        <button type="button" class="btn" id="btnLoad">⟳ Tải</button>
+        <button type="button" class="btn btn-success" id="btnSaveGh">☁ Lưu GitHub</button>
+      </div>
     </header>
-    <div class="body">
-      <input type="hidden" id="f_id" />
-      <div class="form-grid">
-        <label>Ngày Phiếu
-          <input type="date" id="f_A" />
-        </label>
-        <label>Chỉ thị
-          <input type="text" id="f_B" />
-        </label>
-        <label class="full">Code Màu đơn hàng
-          <input type="text" id="f_C" />
-        </label>
-        <label>Nhà máy
-          <input type="text" id="f_D" placeholder="PHC" />
-        </label>
-        <label>ĐVT
-          <input type="text" id="f_H" value="KÍ" />
-        </label>
-        <label class="full">Số phiếu Lefaso *
-          <input type="text" id="f_E" placeholder="OI2602483" />
-        </label>
-        <label>MÃ VẬT TƯ *
-          <input type="text" id="f_F" placeholder="009200" />
-        </label>
-        <label>QC đóng gói
-          <input type="number" id="f_I" step="any" placeholder="phiếu gốc" />
-        </label>
-        <label class="full">TÊN VẬT TƯ
-          <input type="text" id="f_G" />
-        </label>
-        <label>SL hệ thống
-          <input type="number" id="f_J" step="any" value="0" />
-        </label>
-        <label class="full">Cấp phát theo ngày (1→31, cách nhau dấu phẩy)
-          <input type="text" id="f_days" placeholder="vd: 25,,,,10" />
-        </label>
-      </div>
-      <p style="font-size:.8rem;color:#607d8b;margin-top:12px">
-        K / L / M / AT / AU / SL Thừa/Thiếu tự tính sau khi lưu dòng.
-      </p>
-    </div>
-    <footer>
-      <button type="button" class="btn" id="btnDrawerSave">Lưu dòng</button>
-      <button type="button" class="btn ghost" id="btnDrawerCancel">Hủy</button>
-    </footer>
-  </aside>
 
-  <!-- Token guide modal -->
+    <!-- MAIN -->
+    <main class="main">
+      <div class="toolbar-card">
+        <div class="toolbar-group">
+          <div class="field">
+            <label>User</label>
+            <select id="userSelect"></select>
+          </div>
+          <div class="field">
+            <label>Tháng</label>
+            <input type="number" id="metaMonth" min="1" max="12" style="width:48px" />
+          </div>
+          <div class="field">
+            <label>Năm</label>
+            <input type="number" id="metaYear" min="2020" max="2100" style="width:68px" />
+          </div>
+          <div class="field search">
+            <label>🔍</label>
+            <input type="search" id="filterQ" placeholder="Số phiếu Lefaso, MÃ VẬT TƯ, TÊN VẬT TƯ…" />
+          </div>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" class="btn btn-primary" id="btnAdd">＋ Thêm dòng</button>
+          <button type="button" class="btn" id="btnRecalc">Σ Tính lại</button>
+          <button type="button" class="btn btn-ghost" id="btnDemo">Demo</button>
+          <button type="button" class="btn btn-ghost" id="btnExport">Export</button>
+          <label class="btn btn-ghost" style="cursor:pointer">
+            Import
+            <input type="file" id="fileImport" accept="application/json,.json" hidden />
+          </label>
+          <button type="button" class="btn btn-warn" id="btnToken" style="background:var(--warn-soft);border-color:rgba(245,158,11,.35);color:#fcd34d">🔑 Token</button>
+        </div>
+      </div>
+
+      <div class="status-line">
+        <span id="statusMsg" class="info">Sẵn sàng.</span>
+      </div>
+
+      <div class="content-grid">
+        <!-- LIST -->
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2 id="listTitle">Danh sách phiếu / vật tư</h2>
+              <p class="sub">Chọn 1 dòng để sửa bên phải · hiển thị đủ cột nghiệp vụ (không tràn 31 ngày)</p>
+            </div>
+            <span class="badge" id="listCount">0 dòng</span>
+          </div>
+          <div class="table-scroll">
+            <table class="data" id="dataTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Ngày Phiếu</th>
+                  <th>Nhà máy</th>
+                  <th>Số phiếu Lefaso</th>
+                  <th>MÃ VẬT TƯ</th>
+                  <th>TÊN VẬT TƯ</th>
+                  <th>QC đóng gói</th>
+                  <th>SL hệ thống</th>
+                  <th>SL xưởng nợ kho</th>
+                  <th>SL kho nợ xưởng</th>
+                  <th>SL cần lấy</th>
+                  <th>SL Thừa/Thiếu</th>
+                  <th>SL còn lại so với QC đóng gói</th>
+                  <th>So phieu nguon chuyen qua</th>
+                </tr>
+              </thead>
+              <tbody id="gridBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- DETAIL -->
+        <aside class="card detail-panel">
+          <div class="card-head">
+            <div>
+              <h2 id="detailTitle">Nhập liệu</h2>
+              <p class="sub">Form gọn · đủ trường Excel</p>
+            </div>
+          </div>
+          <div class="card-body" id="detailBody">
+            <div class="detail-empty" id="detailEmpty">
+              Chọn một dòng trong bảng<br />hoặc bấm <b>＋ Thêm dòng</b>
+            </div>
+            <form id="detailForm" style="display:none" onsubmit="return false">
+              <input type="hidden" id="f_id" />
+              <div class="form-grid">
+                <div class="section-title">Thông tin phiếu</div>
+                <label class="form-field">
+                  <span>Ngày Phiếu</span>
+                  <input type="date" id="f_A" />
+                </label>
+                <label class="form-field">
+                  <span>Nhà máy</span>
+                  <input type="text" id="f_D" list="listNM" />
+                  <datalist id="listNM">
+                    <option value="PHC"></option>
+                    <option value="LAF"></option>
+                    <option value="LVF"></option>
+                  </datalist>
+                </label>
+                <label class="form-field full">
+                  <span>Số phiếu Lefaso *</span>
+                  <input type="text" id="f_E" placeholder="OI2602483" autocomplete="off" />
+                </label>
+                <label class="form-field">
+                  <span>Chỉ thị</span>
+                  <input type="text" id="f_B" />
+                </label>
+                <label class="form-field">
+                  <span>Code Màu đơn hàng</span>
+                  <input type="text" id="f_C" />
+                </label>
+
+                <div class="section-title">Vật tư</div>
+                <label class="form-field">
+                  <span>MÃ VẬT TƯ *</span>
+                  <input type="text" id="f_F" placeholder="009200" autocomplete="off" />
+                </label>
+                <label class="form-field">
+                  <span>ĐVT</span>
+                  <input type="text" id="f_H" value="KÍ" />
+                </label>
+                <label class="form-field full">
+                  <span>TÊN VẬT TƯ</span>
+                  <input type="text" id="f_G" />
+                </label>
+                <label class="form-field accent-y">
+                  <span>QC đóng gói</span>
+                  <input type="number" id="f_I" step="any" placeholder="phiếu gốc" />
+                </label>
+                <label class="form-field">
+                  <span>SL hệ thống</span>
+                  <input type="number" id="f_J" step="any" value="0" />
+                </label>
+
+                <div class="section-title">Kết quả auto (chỉ xem)</div>
+                <label class="form-field accent-y readonly">
+                  <span>SL xưởng nợ kho</span>
+                  <input type="text" id="f_K" readonly />
+                </label>
+                <label class="form-field accent-y readonly">
+                  <span>SL kho nợ xưởng</span>
+                  <input type="text" id="f_L" readonly />
+                </label>
+                <label class="form-field readonly">
+                  <span>SL cần lấy</span>
+                  <input type="text" id="f_M" readonly />
+                </label>
+                <label class="form-field readonly">
+                  <span>SL Thừa/Thiếu</span>
+                  <input type="text" id="f_AS" readonly />
+                </label>
+                <label class="form-field full accent-o readonly">
+                  <span>SL còn lại so với QC đóng gói</span>
+                  <input type="text" id="f_AT" readonly />
+                </label>
+                <label class="form-field full accent-c readonly">
+                  <span>So phieu nguon chuyen qua</span>
+                  <input type="text" id="f_AU" readonly />
+                </label>
+
+                <div class="days-toggle">
+                  <div class="section-title" style="border:none;padding:0;margin:0">Chi tiết từng ngày cấp phát (1–31)</div>
+                  <button type="button" class="btn btn-ghost" id="btnToggleDays">Hiện ngày</button>
+                </div>
+                <div class="days-panel" id="daysPanel">
+                  <div class="days-grid" id="daysGrid"></div>
+                </div>
+              </div>
+
+              <div class="detail-actions">
+                <button type="button" class="btn btn-primary" id="btnSaveRow">💾 Lưu dòng</button>
+                <button type="button" class="btn btn-ghost" id="btnNewRow">Làm mới form</button>
+                <button type="button" class="btn btn-danger" id="btnDelRow">Xóa dòng</button>
+              </div>
+            </form>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <!-- Token modal -->
   <div class="modal-backdrop" id="guideModal">
     <div class="modal">
       <header>
-        <span>🔑 Hướng dẫn lấy GitHub Token cho 5 user</span>
-        <button type="button" class="btn" id="btnCloseGuide" style="border-color:rgba(255,255,255,.4)">✕</button>
+        <h3>🔑 Token GitHub cho 5 user</h3>
+        <button type="button" class="btn btn-icon" id="btnCloseGuide">✕</button>
       </header>
       <div class="body">
+        <p>Mỗi user cần PAT để đọc/ghi <code>data/store.json</code> trên repo <code>mrbit4578/THEO-DOI-TRU-NO-VAT-TU</code>.</p>
+        <h4>Fine-grained (khuyến nghị)</h4>
+        <ol>
+          <li>GitHub → avatar → <b>Settings</b> → <b>Developer settings</b></li>
+          <li><b>Personal access tokens</b> → <b>Fine-grained tokens</b> → <b>Generate new token</b></li>
+          <li>Chỉ chọn repo <code>THEO-DOI-TRU-NO-VAT-TU</code></li>
+          <li>Permission <b>Contents: Read and write</b></li>
+          <li>Generate → copy token (chỉ hiện 1 lần)</li>
+        </ol>
         <p>
-          Mỗi user cần <strong>Personal Access Token (PAT)</strong> để <em>đọc/ghi</em>
-          file <code>data/store.json</code> trên repo
-          <code>mrbit4578/THEO-DOI-TRU-NO-VAT-TU</code>.
+          Link:
+          <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Tạo Fine-grained token</a>
+          ·
+          <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">Tokens classic</a>
         </p>
-
-        <h3>Cách A — Fine-grained token (khuyến nghị, an toàn hơn)</h3>
-        <ol>
-          <li>Đăng nhập GitHub → bấm avatar góc phải → <strong>Settings</strong>.</li>
-          <li>Cuối menu trái: <strong>Developer settings</strong>.</li>
-          <li><strong>Personal access tokens</strong> → <strong>Fine-grained tokens</strong> → <strong>Generate new token</strong>.</li>
-          <li>Đặt tên: <code>truno-user1</code> (hoặc user2…5), hạn dùng 30–90 ngày.</li>
-          <li><strong>Resource owner</strong>: chọn tài khoản <code>mrbit4578</code> (hoặc org sở hữu repo).</li>
-          <li><strong>Repository access</strong>: <em>Only select repositories</em> → chọn
-            <code>THEO-DOI-TRU-NO-VAT-TU</code>.</li>
-          <li><strong>Permissions → Repository permissions</strong>:
-            <ul>
-              <li><strong>Contents</strong>: <em>Read and write</em></li>
-              <li><strong>Metadata</strong>: Read-only (tự bật)</li>
-            </ul>
-          </li>
-          <li>Bấm <strong>Generate token</strong> → <strong>copy ngay</strong> (chỉ hiện 1 lần).</li>
-        </ol>
-
-        <h3>Cách B — Classic token (nhanh)</h3>
-        <ol>
-          <li><strong>Developer settings</strong> → <strong>Personal access tokens</strong> → <strong>Tokens (classic)</strong>.</li>
-          <li><strong>Generate new token (classic)</strong>.</li>
-          <li>Tick scope: <strong><code>repo</code></strong> (full control of private repositories).
-            Nếu repo <em>public</em> và chỉ cần contents, có thể dùng fine-grained như Cách A.</li>
-          <li>Generate → copy token.</li>
-        </ol>
-
-        <h3>Đưa token cho từng user</h3>
-        <ol>
-          <li>Gửi token <strong>riêng</strong> qua kênh nội bộ (không chat public, không commit vào git).</li>
-          <li>User mở web app → bấm <strong>🔑 Token</strong> → dán token → <strong>Lưu token</strong>.</li>
-          <li>Token chỉ lưu trên <em>trình duyệt máy đó</em> (localStorage), không upload đi đâu khác ngoài GitHub API.</li>
-          <li>Chọn User 1…5 → <strong>Tải GitHub</strong> → sửa → <strong>Lưu GitHub</strong>.</li>
-        </ol>
-
-        <div class="tip">
-          <strong>Mẹo 5 user:</strong> tạo 5 fine-grained token (user1…user5), cùng quyền Contents R/W trên 1 repo.
-          Khi user nghỉ việc → revoke token đó trong GitHub Settings.
-        </div>
-        <div class="warn">
-          <strong>Cảnh báo:</strong> Ai có token + quyền write đều sửa được <code>store.json</code>.
-          Không đưa token cho người ngoài. Không chụp màn hình token lên group chat.
-        </div>
-
-        <h3>Dán token tại đây</h3>
-        <label style="display:block;font-size:.85rem;color:#555;margin-bottom:4px">GitHub Personal Access Token</label>
-        <input type="password" id="tokenInput" placeholder="github_pat_… hoặc ghp_…" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font-family:ui-monospace,monospace" />
+        <div class="tip">Gửi mỗi user 1 token riêng. User dán vào ô bên dưới trên máy của họ.</div>
+        <div class="warn">Không commit token, không chụp màn hình đưa group chat public.</div>
+        <label style="display:block;margin:10px 0 6px;font-size:0.8rem;color:var(--muted)">Dán token tại đây</label>
+        <input type="password" id="tokenInput" placeholder="github_pat_… hoặc ghp_…" autocomplete="off" />
       </div>
       <footer>
-        <button type="button" class="btn" id="btnSaveTokenModal">Lưu token</button>
-        <a class="btn" style="background:#24292f;text-decoration:none;display:inline-block" href="https://github.com/settings/tokens" target="_blank" rel="noopener">Mở trang Token GitHub</a>
-        <a class="btn" style="background:#0969da;text-decoration:none;display:inline-block" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Tạo Fine-grained token</a>
+        <button type="button" class="btn btn-primary" id="btnSaveTokenModal">Lưu token</button>
+        <button type="button" class="btn btn-ghost" id="btnCloseGuide2">Đóng</button>
       </footer>
     </div>
   </div>

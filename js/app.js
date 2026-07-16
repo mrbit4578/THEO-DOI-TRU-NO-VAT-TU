@@ -1,37 +1,6 @@
 /* global TruNoLogic, GitHubStore */
 (function () {
-  /** Exact Excel headers (row 2) — do not rename */
-  const COLS = [
-    { key: "A", title: "Ngày Phiếu", w: 100, type: "date" },
-    { key: "B", title: "Chỉ thị", w: 80, type: "text" },
-    { key: "C", title: "Code Màu đơn hàng", w: 130, type: "text" },
-    { key: "D", title: "Nhà máy", w: 70, type: "text" },
-    { key: "E", title: "Số phiếu Lefaso", w: 110, type: "text" },
-    { key: "F", title: "MÃ VẬT TƯ", w: 90, type: "text" },
-    { key: "G", title: "TÊN VẬT TƯ", w: 220, type: "text" },
-    { key: "H", title: "ĐVT", w: 50, type: "text" },
-    { key: "I", title: "QC đóng gói", w: 80, type: "num", yellow: true },
-    { key: "J", title: "SL hệ thống", w: 90, type: "num" },
-    { key: "K", title: "SL xưởng nợ kho", w: 100, type: "num", yellow: true },
-    { key: "L", title: "SL kho nợ xưởng", w: 100, type: "num", yellow: true },
-    { key: "M", title: "SL cần lấy", w: 90, type: "num" },
-  ];
-  // Days 1..31 → N..AR (titles "1".."31" like Excel formulas =1..31)
-  const DAY_COLS = Array.from({ length: 31 }, (_, i) => ({
-    key: "d" + (i + 1),
-    title: String(i + 1),
-    w: 42,
-    type: "num",
-    dayIndex: i,
-  }));
-  const TAIL = [
-    { key: "AS", title: "SL Thừa/Thiếu", w: 100, type: "num" },
-    { key: "AT", title: "SL còn lại so với QC đóng gói", w: 160, type: "text", orange: true },
-    { key: "AU", title: "So phieu nguon chuyen qua", w: 140, type: "text", cyan: true },
-  ];
-
   const SHEETS = ["PHC", "NM LAF", "NM LVF"];
-
   const storeApi = new GitHubStore();
   storeApi.loadCfgFromStorage();
 
@@ -41,8 +10,10 @@
     month: Number(localStorage.getItem("truno_month") || 7),
     year: Number(localStorage.getItem("truno_year") || 2026),
     selectedId: null,
-    store: emptyStore(),
     filter: "",
+    daysOpen: false,
+    mode: "view", // view | edit | create
+    store: emptyStore(),
   };
 
   function emptyStore() {
@@ -75,7 +46,7 @@
 
   function rowsOfSheet() {
     if (!state.store.sheets) state.store.sheets = { PHC: [], "NM LAF": [], "NM LVF": [] };
-    if (!state.store.sheets[state.sheet]) state.store.sheets[state.sheet] = [];
+    if (!Array.isArray(state.store.sheets[state.sheet])) state.store.sheets[state.sheet] = [];
     return state.store.sheets[state.sheet];
   }
 
@@ -100,7 +71,6 @@
       .replace(/"/g, "&quot;");
   }
 
-  /** Normalize store from v1 (rows[]) → v2 (sheets) */
   function normalizeStore(data) {
     const base = emptyStore();
     if (!data) return base;
@@ -116,44 +86,71 @@
     } else if (Array.isArray(data.rows)) {
       out.sheets.PHC = data.rows;
     }
-    state.month = out.meta.month || state.month;
-    state.year = out.meta.year || state.year;
+    if (out.meta.month) state.month = out.meta.month;
+    if (out.meta.year) state.year = out.meta.year;
     return out;
   }
 
   function recomputeSheet() {
-    const rows = rowsOfSheet();
-    state.store.sheets[state.sheet] = TruNoLogic.autoFill(rows);
+    state.store.sheets[state.sheet] = TruNoLogic.autoFill(rowsOfSheet());
   }
 
   function recomputeAll() {
     for (const s of SHEETS) {
-      const rows = state.store.sheets[s] || [];
-      state.store.sheets[s] = TruNoLogic.autoFill(rows);
+      state.store.sheets[s] = TruNoLogic.autoFill(state.store.sheets[s] || []);
     }
   }
 
+  function defaultPlant() {
+    if (state.sheet === "PHC") return "PHC";
+    return state.sheet.replace("NM ", "");
+  }
+
+  /* ---------- render ---------- */
   function renderUsers() {
     $("#userSelect").innerHTML = state.store.users
       .map((u) => `<option value="${u.id}" ${u.id === state.userId ? "selected" : ""}>${escapeHtml(u.name)}</option>`)
       .join("");
+    $("#sideUser").textContent = currentUser().name;
   }
 
-  function renderTabs() {
-    $$(".sheet-tab").forEach((t) => {
-      t.classList.toggle("active", t.dataset.sheet === state.sheet);
+  function renderSheetNav() {
+    $("#sheetNav").innerHTML = SHEETS.map((s) => {
+      const n = (state.store.sheets[s] || []).length;
+      const active = s === state.sheet ? "active" : "";
+      const ico = s === "PHC" ? "🏭" : s.includes("LAF") ? "🧱" : "🧪";
+      return `<button type="button" class="nav-item ${active}" data-sheet="${s}">
+        <span class="ico">${ico}</span>
+        <span>${s}</span>
+        <span class="meta">${n}</span>
+      </button>`;
+    }).join("");
+    $$("#sheetNav .nav-item").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.sheet = btn.dataset.sheet;
+        localStorage.setItem("truno_sheet", state.sheet);
+        state.selectedId = null;
+        closeMobileSidebar();
+        renderAll();
+      });
     });
   }
 
-  function renderMeta() {
+  function renderKpis() {
+    const rows = rowsOfSheet();
+    const phieus = new Set(rows.map((r) => String(r.E || "").trim()).filter(Boolean));
+    $("#kpiRows").textContent = rows.length;
+    $("#kpiPhieu").textContent = phieus.size;
+    $("#kpiK").textContent = rows.filter((r) => r.K != null && r.K !== "").length;
+    $("#kpiL").textContent = rows.filter((r) => r.L != null && r.L !== "").length;
+    $("#listCount").textContent = `${rows.length} dòng`;
+    $("#listTitle").textContent = `Danh sách · ${state.sheet}`;
     $("#metaMonth").value = state.month;
     $("#metaYear").value = state.year;
-    $("#metaUpdated").textContent = state.store.meta.updatedBy
-      ? `${state.store.meta.updatedBy} · ${state.store.meta.updatedAt || ""}`
+    $("#sideUpdated").textContent = state.store.meta.updatedBy
+      ? `${state.store.meta.updatedBy}\n${(state.store.meta.updatedAt || "").slice(0, 19).replace("T", " ")}`
       : "—";
-    $("#tokenHint").textContent = storeApi.token ? "Token: đã cấu hình" : "Token: chưa có";
-    const n = rowsOfSheet().length;
-    $("#metaCount").textContent = `${n} dòng · sheet ${state.sheet}`;
+    $("#sideToken").textContent = storeApi.token ? "Đã cấu hình ✓" : "Chưa cấu hình";
   }
 
   function filteredRows() {
@@ -163,174 +160,115 @@
     return rows
       .map((r, i) => ({ r, i }))
       .filter(({ r }) =>
-        [r.E, r.F, r.G, r.C, r.D, r.AU, r.AT].some((x) => String(x || "").toLowerCase().includes(q))
+        [r.E, r.F, r.G, r.C, r.D, r.AU, r.AT, r.B].some((x) => String(x || "").toLowerCase().includes(q))
       );
   }
 
   function renderTable() {
-    const thead = $("#gridHead");
-    const tbody = $("#gridBody");
-
-    // Header: group row + column titles (exact Excel names)
-    const daySpan = DAY_COLS.length;
-    thead.innerHTML = `
-      <tr class="group">
-        <th class="row-num" rowspan="2">#</th>
-        <th colspan="${COLS.length}" style="text-align:left;padding-left:8px">Thông tin phiếu / vật tư</th>
-        <th colspan="${daySpan}">Chi tiết từng ngày cấp phát thực tế kho &amp; xưởng giao nhận</th>
-        <th colspan="${TAIL.length}">Kết quả trừ nợ</th>
-        <th rowspan="2" style="min-width:70px">Thao tác</th>
-      </tr>
-      <tr class="cols">
-        ${COLS.map((c, idx) => {
-          const freeze =
-            idx === 0 ? "col-freeze-2" : idx === 1 ? "" : "";
-          // freeze A (date) after row num — keep simple: freeze E,F via class on body only for first few
-          return `<th style="min-width:${c.w}px" title="${escapeHtml(c.title)}">${escapeHtml(c.title)}</th>`;
-        }).join("")}
-        ${DAY_COLS.map((c) => `<th style="min-width:${c.w}px">${escapeHtml(c.title)}</th>`).join("")}
-        ${TAIL.map((c) => `<th style="min-width:${c.w}px" title="${escapeHtml(c.title)}">${escapeHtml(c.title)}</th>`).join("")}
-      </tr>`;
-
     const list = filteredRows();
+    const tbody = $("#gridBody");
     if (!list.length) {
-      tbody.innerHTML = `<tr><td colspan="${COLS.length + DAY_COLS.length + TAIL.length + 2}" style="text-align:center;padding:28px;color:#78909c">
-        Chưa có dữ liệu. Bấm <b>+ Thêm dòng</b>, <b>Demo</b> hoặc <b>Tải GitHub</b>.
-      </td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="14"><div class="empty"><b>Chưa có dữ liệu</b>Bấm 「＋ Thêm dòng」 hoặc 「Demo」</div></td></tr>`;
       return;
     }
-
     tbody.innerHTML = list
       .map(({ r, i }) => {
-        const sel = r.id === state.selectedId ? "selected" : "";
-        const days = Array.isArray(r.days) ? r.days : [];
-        const dayCells = DAY_COLS.map((dc) => {
-          const v = days[dc.dayIndex];
-          return `<td class="cell-num cell-input-wrap" data-id="${r.id}" data-field="day" data-day="${dc.dayIndex}">
-            <input class="cell-input cell-num" value="${fmt(v)}" data-id="${r.id}" data-day="${dc.dayIndex}" /></td>`;
-        }).join("");
-
-        return `<tr class="${sel}" data-id="${r.id}">
-          <td class="row-num">${i + 1}</td>
-          <td class="col-freeze-2"><input class="cell-input" data-id="${r.id}" data-field="A" value="${escapeHtml(r.A || "")}" /></td>
-          <td><input class="cell-input" data-id="${r.id}" data-field="B" value="${escapeHtml(r.B || "")}" /></td>
-          <td><input class="cell-input" data-id="${r.id}" data-field="C" value="${escapeHtml(r.C || "")}" /></td>
-          <td class="cell-center"><input class="cell-input cell-center" data-id="${r.id}" data-field="D" value="${escapeHtml(r.D || (state.sheet === "PHC" ? "PHC" : state.sheet.replace("NM ", "")))}" /></td>
-          <td><input class="cell-input" data-id="${r.id}" data-field="E" value="${escapeHtml(r.E || "")}" style="font-weight:700" /></td>
-          <td><input class="cell-input" data-id="${r.id}" data-field="F" value="${escapeHtml(r.F || "")}" style="font-weight:700" /></td>
-          <td><input class="cell-input" data-id="${r.id}" data-field="G" value="${escapeHtml(r.G || "")}" title="${escapeHtml(r.G || "")}" /></td>
-          <td class="cell-center"><input class="cell-input cell-center" data-id="${r.id}" data-field="H" value="${escapeHtml(r.H || "KÍ")}" /></td>
-          <td class="cell-num cell-yellow"><input class="cell-input cell-num" data-id="${r.id}" data-field="I" value="${fmt(r.I)}" title="QC (auto / nhập phiếu gốc)" /></td>
-          <td class="cell-num"><input class="cell-input cell-num" data-id="${r.id}" data-field="J" value="${fmt(r.J)}" /></td>
-          <td class="cell-num cell-yellow cell-readonly">${fmt(r.K)}</td>
-          <td class="cell-num cell-yellow cell-readonly">${fmt(r.L)}</td>
-          <td class="cell-num cell-readonly"><strong>${fmt(r.M)}</strong></td>
-          ${dayCells}
-          <td class="cell-num cell-readonly">${fmt(r.AS)}</td>
-          <td class="cell-orange cell-readonly" title="${escapeHtml(r.AT || "")}">${escapeHtml(r.AT || "")}</td>
-          <td class="cell-cyan cell-readonly">${escapeHtml(r.AU || "")}</td>
-          <td>
-            <button type="button" class="btn btn-danger btn-del" data-id="${r.id}" style="padding:2px 6px;font-size:11px;background:#c00000;border:none">Xóa</button>
-          </td>
+        const active = r.id === state.selectedId ? "active" : "";
+        const atBadge = r.AT
+          ? r.AT.includes("OK")
+            ? "ok"
+            : r.AT.includes("lớn hơn")
+              ? "warn"
+              : "info"
+          : "muted";
+        return `<tr class="${active}" data-id="${r.id}">
+          <td>${i + 1}</td>
+          <td>${escapeHtml(r.A || "")}</td>
+          <td>${escapeHtml(r.D || "")}</td>
+          <td><strong>${escapeHtml(r.E || "")}</strong></td>
+          <td><strong>${escapeHtml(r.F || "")}</strong></td>
+          <td class="clip" title="${escapeHtml(r.G || "")}">${escapeHtml(r.G || "")}</td>
+          <td class="num">${fmt(r.I)}</td>
+          <td class="num">${fmt(r.J)}</td>
+          <td class="num">${fmt(r.K)}</td>
+          <td class="num">${fmt(r.L)}</td>
+          <td class="num"><strong>${fmt(r.M)}</strong></td>
+          <td class="num">${fmt(r.AS)}</td>
+          <td><span class="badge ${atBadge}">${escapeHtml(r.AT || "—")}</span></td>
+          <td><span class="badge info">${escapeHtml(r.AU || "—")}</span></td>
         </tr>`;
       })
       .join("");
 
-    // bind inputs
-    tbody.querySelectorAll("input.cell-input").forEach((inp) => {
-      inp.addEventListener("change", onCellChange);
-      inp.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          inp.blur();
-        }
-      });
-    });
-    tbody.querySelectorAll(".btn-del").forEach((b) => {
-      b.addEventListener("click", () => {
-        if (!confirm("Xóa dòng này?")) return;
-        const id = b.dataset.id;
-        state.store.sheets[state.sheet] = rowsOfSheet().filter((r) => r.id !== id);
-        recomputeSheet();
-        renderTable();
-        setStatus("Đã xóa dòng (chưa lưu GitHub).", "info");
-      });
-    });
     tbody.querySelectorAll("tr[data-id]").forEach((tr) => {
-      tr.addEventListener("click", (e) => {
-        if (e.target.closest("button")) return;
-        state.selectedId = tr.dataset.id;
-        $$("#gridBody tr").forEach((x) => x.classList.toggle("selected", x.dataset.id === state.selectedId));
-      });
+      tr.addEventListener("click", () => selectRow(tr.dataset.id));
     });
   }
 
-  function onCellChange(e) {
-    const inp = e.target;
-    const id = inp.dataset.id;
+  function buildDaysGrid(days) {
+    const arr = Array.isArray(days) ? days : [];
+    const grid = $("#daysGrid");
+    grid.innerHTML = Array.from({ length: 31 }, (_, i) => {
+      const v = arr[i];
+      return `<label class="day-cell">
+        <span>Ngày ${i + 1}</span>
+        <input type="number" step="any" data-day="${i}" value="${v == null || v === "" ? "" : fmt(v)}" />
+      </label>`;
+    }).join("");
+  }
+
+  function showForm(show) {
+    $("#detailEmpty").style.display = show ? "none" : "block";
+    $("#detailForm").style.display = show ? "block" : "none";
+  }
+
+  function fillForm(row, mode) {
+    state.mode = mode;
+    showForm(true);
+    $("#detailTitle").textContent = mode === "create" ? "Thêm dòng mới" : "Chỉnh sửa dòng";
+    $("#f_id").value = row.id || "";
+    $("#f_A").value = row.A || new Date().toISOString().slice(0, 10);
+    $("#f_B").value = row.B || "";
+    $("#f_C").value = row.C || "";
+    $("#f_D").value = row.D || defaultPlant();
+    $("#f_E").value = row.E || "";
+    $("#f_F").value = row.F || "";
+    $("#f_G").value = row.G || "";
+    $("#f_H").value = row.H || "KÍ";
+    $("#f_I").value = row.I ?? "";
+    $("#f_J").value = row.J ?? 0;
+    $("#f_K").value = fmt(row.K);
+    $("#f_L").value = fmt(row.L);
+    $("#f_M").value = fmt(row.M);
+    $("#f_AS").value = fmt(row.AS);
+    $("#f_AT").value = row.AT || "";
+    $("#f_AU").value = row.AU || "";
+    buildDaysGrid(row.days);
+    $("#daysPanel").classList.toggle("open", state.daysOpen);
+    $("#btnToggleDays").textContent = state.daysOpen ? "Ẩn ngày" : "Hiện ngày";
+  }
+
+  function selectRow(id) {
+    state.selectedId = id;
     const row = rowsOfSheet().find((r) => r.id === id);
     if (!row) return;
-
-    if (inp.dataset.day !== undefined) {
-      const di = Number(inp.dataset.day);
-      if (!Array.isArray(row.days)) row.days = [];
-      while (row.days.length < 31) row.days.push(null);
-      const raw = inp.value.trim();
-      row.days[di] = raw === "" ? null : Number(raw);
-    } else {
-      const field = inp.dataset.field;
-      let val = inp.value;
-      if (["I", "J"].includes(field)) {
-        val = val.trim() === "" ? null : Number(val);
-      }
-      row[field] = val;
-    }
-    row.updatedBy = currentUser().name;
-    row.updatedAt = new Date().toISOString();
-    recomputeSheet();
+    fillForm(row, "edit");
     renderTable();
-    setStatus("Đã cập nhật & tính lại K/L/M/AT/AU.", "ok");
   }
 
-  function openDrawer(editId) {
-    $("#drawer").classList.add("open");
-    $("#drawerBackdrop").classList.add("open");
-    const row = editId ? rowsOfSheet().find((r) => r.id === editId) : null;
-    $("#f_id").value = row?.id || "";
-    $("#f_A").value = row?.A || new Date().toISOString().slice(0, 10);
-    $("#f_B").value = row?.B || "";
-    $("#f_C").value = row?.C || "";
-    $("#f_D").value = row?.D || (state.sheet === "PHC" ? "PHC" : state.sheet.replace("NM ", ""));
-    $("#f_E").value = row?.E || "";
-    $("#f_F").value = row?.F || "";
-    $("#f_G").value = row?.G || "";
-    $("#f_H").value = row?.H || "KÍ";
-    $("#f_I").value = row?.I ?? "";
-    $("#f_J").value = row?.J ?? 0;
-    $("#f_days").value = (row?.days || []).filter((x) => x != null && x !== "").join(",");
-    $("#drawerTitle").textContent = row ? "Sửa dòng" : "Thêm dòng mới";
-  }
-
-  function closeDrawer() {
-    $("#drawer").classList.remove("open");
-    $("#drawerBackdrop").classList.remove("open");
-  }
-
-  function saveDrawer() {
-    const id = $("#f_id").value || undefined;
-    const daysRaw = $("#f_days").value.trim();
+  function readForm() {
     const days = Array(31).fill(null);
-    if (daysRaw) {
-      daysRaw.split(/[,;\s]+/).forEach((x, i) => {
-        if (i < 31 && x !== "") days[i] = Number(x);
-      });
-    }
-    const row = TruNoLogic.newRow({
-      id,
+    $$("#daysGrid input[data-day]").forEach((inp) => {
+      const i = Number(inp.dataset.day);
+      const raw = inp.value.trim();
+      days[i] = raw === "" ? null : Number(raw);
+    });
+    return TruNoLogic.newRow({
+      id: $("#f_id").value || undefined,
       A: $("#f_A").value,
       B: $("#f_B").value,
       C: $("#f_C").value,
-      D: $("#f_D").value,
+      D: $("#f_D").value || defaultPlant(),
       E: $("#f_E").value.trim(),
       F: $("#f_F").value.trim(),
       G: $("#f_G").value.trim(),
@@ -341,6 +279,10 @@
       updatedBy: currentUser().name,
       updatedAt: new Date().toISOString(),
     });
+  }
+
+  function saveRow() {
+    const row = readForm();
     if (!row.E || !row.F) {
       setStatus("Cần nhập «Số phiếu Lefaso» và «MÃ VẬT TƯ».", "err");
       return;
@@ -351,24 +293,67 @@
     else list.push(row);
     state.store.sheets[state.sheet] = list;
     recomputeSheet();
-    closeDrawer();
-    renderTable();
-    renderMeta();
-    setStatus("Đã lưu dòng — nhớ «Lưu GitHub» để chia sẻ cho user khác.", "ok");
+    state.selectedId = row.id || list[list.length - 1].id;
+    renderAll();
+    const saved = rowsOfSheet().find((r) => r.id === state.selectedId);
+    if (saved) fillForm(saved, "edit");
+    setStatus("Đã lưu dòng & tính K/L/M/AT/AU. Nhớ ☁ Lưu GitHub để chia sẻ.", "ok");
   }
 
+  function newForm() {
+    state.selectedId = null;
+    state.mode = "create";
+    fillForm(
+      TruNoLogic.newRow({
+        D: defaultPlant(),
+        A: new Date().toISOString().slice(0, 10),
+        H: "KÍ",
+        J: 0,
+        days: [],
+      }),
+      "create"
+    );
+    $("#f_id").value = "";
+    renderTable();
+    setStatus("Form thêm dòng mới.", "info");
+  }
+
+  function deleteRow() {
+    const id = $("#f_id").value || state.selectedId;
+    if (!id) {
+      setStatus("Chưa chọn dòng để xóa.", "err");
+      return;
+    }
+    if (!confirm("Xóa dòng đang chọn?")) return;
+    state.store.sheets[state.sheet] = rowsOfSheet().filter((r) => r.id !== id);
+    recomputeSheet();
+    state.selectedId = null;
+    showForm(false);
+    renderAll();
+    setStatus("Đã xóa dòng (chưa lưu GitHub).", "info");
+  }
+
+  function renderAll() {
+    renderUsers();
+    renderSheetNav();
+    renderKpis();
+    renderTable();
+    if (!state.selectedId && state.mode !== "create") showForm(false);
+  }
+
+  /* ---------- remote ---------- */
   async function loadRemote() {
-    setStatus("Đang tải từ GitHub…", "info");
+    setStatus("Đang tải GitHub…", "info");
     try {
       const data = await storeApi.load();
       state.store = normalizeStore(data);
       recomputeAll();
-      renderUsers();
-      renderMeta();
-      renderTabs();
-      renderTable();
+      state.selectedId = null;
+      state.mode = "view";
+      showForm(false);
+      renderAll();
       const total = SHEETS.reduce((s, k) => s + (state.store.sheets[k]?.length || 0), 0);
-      setStatus(total ? `Đã tải ${total} dòng từ GitHub/local.` : "Chưa có dữ liệu online — dùng Demo hoặc thêm dòng.", total ? "ok" : "info");
+      setStatus(total ? `Đã tải ${total} dòng.` : "Chưa có dữ liệu online.", total ? "ok" : "info");
     } catch (e) {
       setStatus(String(e.message || e), "err");
     }
@@ -382,10 +367,10 @@
     state.store.meta.year = state.year;
     state.store.meta.title = "THEO DÕI TRỪ NỢ NHÀ MÀY & KHO";
     recomputeAll();
-    setStatus("Đang lưu lên GitHub…", "info");
+    setStatus("Đang lưu GitHub…", "info");
     try {
-      await storeApi.save(state.store, `update by ${user.name} @ ${state.store.meta.updatedAt}`, user.name);
-      renderMeta();
+      await storeApi.save(state.store, `update by ${user.name}`, user.name);
+      renderKpis();
       setStatus(`Đã lưu GitHub · ${user.name}`, "ok");
     } catch (e) {
       storeApi.cacheLocal(state.store);
@@ -394,35 +379,42 @@
   }
 
   function loadDemo() {
-    if (rowsOfSheet().length && !confirm("Thay dữ liệu sheet hiện tại bằng mẫu demo?")) return;
-    // demo only on PHC by default
+    if (rowsOfSheet().length && !confirm("Thay sheet hiện tại bằng demo?")) return;
     state.sheet = "PHC";
-    state.store.sheets.PHC = TruNoLogic.sampleData();
     localStorage.setItem("truno_sheet", "PHC");
+    state.store.sheets.PHC = TruNoLogic.sampleData();
     recomputeSheet();
-    renderTabs();
-    renderTable();
-    renderMeta();
-    setStatus("Demo: OI2601482 → OI2602483 → OI2602489 (quét lùi 009200).", "ok");
+    state.selectedId = null;
+    showForm(false);
+    renderAll();
+    setStatus("Demo đã nạp (OI2601482 → OI2602483 → OI2602489).", "ok");
+  }
+
+  function openGuide(focus) {
+    $("#guideModal").classList.add("open");
+    $("#tokenInput").value = storeApi.token || "";
+    if (focus) setTimeout(() => $("#tokenInput").focus(), 50);
+  }
+  function closeGuide() {
+    $("#guideModal").classList.remove("open");
+  }
+
+  function openMobileSidebar() {
+    $("#sidebar").classList.add("open");
+    $("#sidebarBackdrop").classList.add("open");
+  }
+  function closeMobileSidebar() {
+    $("#sidebar").classList.remove("open");
+    $("#sidebarBackdrop").classList.remove("open");
   }
 
   function bind() {
     $("#userSelect").addEventListener("change", (e) => {
       state.userId = e.target.value;
       localStorage.setItem("truno_user", state.userId);
+      $("#sideUser").textContent = currentUser().name;
       setStatus(`Đang làm việc: ${currentUser().name}`, "info");
     });
-
-    $$(".sheet-tab").forEach((t) => {
-      t.addEventListener("click", () => {
-        state.sheet = t.dataset.sheet;
-        localStorage.setItem("truno_sheet", state.sheet);
-        renderTabs();
-        renderTable();
-        renderMeta();
-      });
-    });
-
     $("#metaMonth").addEventListener("change", (e) => {
       state.month = Number(e.target.value) || 1;
       localStorage.setItem("truno_month", state.month);
@@ -433,20 +425,42 @@
       localStorage.setItem("truno_year", state.year);
       state.store.meta.year = state.year;
     });
+    $("#filterQ").addEventListener("input", (e) => {
+      state.filter = e.target.value;
+      renderTable();
+    });
 
-    $("#btnAdd").addEventListener("click", () => openDrawer(null));
+    $("#btnAdd").addEventListener("click", newForm);
+    $("#btnNewRow").addEventListener("click", newForm);
+    $("#btnSaveRow").addEventListener("click", saveRow);
+    $("#btnDelRow").addEventListener("click", deleteRow);
     $("#btnRecalc").addEventListener("click", () => {
       recomputeAll();
-      renderTable();
-      setStatus("Đã tính lại toàn bộ sheet theo quy tắc VBA.", "ok");
+      renderAll();
+      if (state.selectedId) {
+        const row = rowsOfSheet().find((r) => r.id === state.selectedId);
+        if (row) fillForm(row, "edit");
+      }
+      setStatus("Đã tính lại toàn bộ.", "ok");
     });
     $("#btnLoad").addEventListener("click", loadRemote);
     $("#btnSaveGh").addEventListener("click", saveRemote);
     $("#btnDemo").addEventListener("click", loadDemo);
-    $("#btnToken").addEventListener("click", () => {
-      openTokenModal(true);
+    $("#btnToken").addEventListener("click", () => openGuide(true));
+    $("#btnGuide").addEventListener("click", () => openGuide(false));
+    $("#btnCloseGuide").addEventListener("click", closeGuide);
+    $("#btnCloseGuide2").addEventListener("click", closeGuide);
+    $("#btnSaveTokenModal").addEventListener("click", () => {
+      storeApi.setToken($("#tokenInput").value.trim());
+      closeGuide();
+      renderKpis();
+      setStatus(storeApi.token ? "Đã lưu token trên trình duyệt này." : "Đã xóa token.", "ok");
     });
-    $("#btnGuide").addEventListener("click", () => openTokenModal(false));
+    $("#btnToggleDays").addEventListener("click", () => {
+      state.daysOpen = !state.daysOpen;
+      $("#daysPanel").classList.toggle("open", state.daysOpen);
+      $("#btnToggleDays").textContent = state.daysOpen ? "Ẩn ngày" : "Hiện ngày";
+    });
     $("#btnExport").addEventListener("click", () => {
       const blob = new Blob([JSON.stringify(state.store, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
@@ -458,59 +472,30 @@
       const f = e.target.files?.[0];
       if (!f) return;
       try {
-        const data = JSON.parse(await f.text());
-        state.store = normalizeStore(data);
+        state.store = normalizeStore(JSON.parse(await f.text()));
         recomputeAll();
-        renderUsers();
-        renderTable();
-        renderMeta();
+        state.selectedId = null;
+        showForm(false);
+        renderAll();
         setStatus("Đã import JSON.", "ok");
       } catch (err) {
         setStatus("Import lỗi: " + err.message, "err");
       }
       e.target.value = "";
     });
-
-    $("#filterQ").addEventListener("input", (e) => {
-      state.filter = e.target.value;
-      renderTable();
-    });
-
-    $("#btnDrawerSave").addEventListener("click", saveDrawer);
-    $("#btnDrawerClose").addEventListener("click", closeDrawer);
-    $("#drawerBackdrop").addEventListener("click", closeDrawer);
-    $("#btnDrawerCancel").addEventListener("click", closeDrawer);
-
-    $("#btnCloseGuide").addEventListener("click", () => {
-      $("#guideModal").classList.remove("open");
-    });
-    $("#btnSaveTokenModal").addEventListener("click", () => {
-      const t = $("#tokenInput").value.trim();
-      storeApi.setToken(t);
-      $("#guideModal").classList.remove("open");
-      renderMeta();
-      setStatus(t ? "Đã lưu GitHub Token trên trình duyệt này." : "Đã xóa token.", "ok");
-    });
-  }
-
-  function openTokenModal(focusToken) {
-    $("#guideModal").classList.add("open");
-    $("#tokenInput").value = storeApi.token || "";
-    if (focusToken) setTimeout(() => $("#tokenInput").focus(), 100);
+    $("#btnMenu").addEventListener("click", openMobileSidebar);
+    $("#sidebarBackdrop").addEventListener("click", closeMobileSidebar);
   }
 
   async function init() {
-    renderUsers();
-    renderTabs();
     bind();
     await loadRemote();
     if (!SHEETS.some((s) => (state.store.sheets[s] || []).length)) {
       state.store.sheets.PHC = TruNoLogic.sampleData();
       recomputeSheet();
-      setStatus("Nạp demo (chưa có dữ liệu remote).", "info");
+      setStatus("Demo mặc định (chưa có data remote).", "info");
     }
-    renderMeta();
-    renderTable();
+    renderAll();
   }
 
   document.addEventListener("DOMContentLoaded", init);
