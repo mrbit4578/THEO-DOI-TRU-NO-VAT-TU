@@ -589,11 +589,14 @@ input[type="number"].no-spin::-webkit-inner-spin-button {
   min-height: 12px;
   margin-top: 2px;
 }
-.day-cell input.day-snap {
-  color: #fcd34d;
-  background: rgba(245, 158, 11, 0.12);
+.day-cell input.day-invalid {
+  color: #fda4af;
+  background: rgba(244, 63, 94, 0.14);
   border-radius: 4px;
+  outline: 1px solid rgba(244, 63, 94, 0.45);
 }
+.day-qty.ok { color: #6ee7b7 !important; }
+.day-qty.bad { color: #fda4af !important; font-weight: 600; }
 .days-hint {
   grid-column: 1 / -1;
   margin: 0;

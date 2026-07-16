@@ -316,13 +316,13 @@
     const el = $("#daysHint");
     if (!el) return;
     if (qc) {
-      el.innerHTML = `Nhập <b>số KÍ thực cấp</b>. QC = <b>${fmt(qc)}</b> → chỉ nhận bội số (…, ${fmt(qc)}, ${fmt(qc * 2)}, ${fmt(qc * 3)}, …). Số lẻ hệ thống <b>tự làm tròn ngầm</b>.`;
+      el.innerHTML = `Nhập thẳng <b>số KÍ</b>. QC = <b>${fmt(qc)}</b> → hợp lệ: ${fmt(qc)}, ${fmt(qc * 2)}, ${fmt(qc * 3)}… (vd nhập <b>${fmt(qc * 2)}</b> = 2 kiện). <b>Không tự sửa số</b> — số lẻ sẽ <b>cảnh báo</b>, bạn tự chỉnh.`;
     } else {
-      el.innerHTML = `Chưa có <b>QC đóng gói</b> — chọn mã VT để map QC, rồi nhập KÍ thực cấp (bội số QC).`;
+      el.innerHTML = `Chưa có <b>QC đóng gói</b> — chọn mã VT để map QC trước khi nhập KÍ theo ngày.`;
     }
   }
 
-  /** Build day inputs: nhập thẳng KÍ, không spinner; blur → snap bội QC */
+  /** Nhập thẳng KÍ, không spinner; lẻ so QC → cảnh báo, KHÔNG tự đổi số */
   function buildDaysGrid(daysQty) {
     const arr = Array.isArray(daysQty) ? daysQty : [];
     const grid = $("#daysGrid");
@@ -337,93 +337,102 @@
     }).join("");
 
     grid.querySelectorAll("input[data-day]").forEach((inp) => {
-      inp.addEventListener("input", () => onDayQtyInput(inp, false));
-      inp.addEventListener("blur", () => onDayQtyInput(inp, true));
-      inp.addEventListener("change", () => onDayQtyInput(inp, true));
+      // hiển thị trạng thái kiện / cảnh báo
+      validateDayInput(inp, false);
+      inp.addEventListener("input", () => validateDayInput(inp, false));
+      inp.addEventListener("blur", () => validateDayInput(inp, true));
     });
   }
 
-  function onDayQtyInput(inp, doSnap) {
-    // cho phép số thập phân khi gõ; khi blur mới ràng buộc bội QC
+  /**
+   * @returns {{ ok: boolean, qty: number|null, message: string }}
+   */
+  function validateDayInput(inp, showStatus) {
     let raw = String(inp.value || "").trim().replace(",", ".");
-    raw = raw.replace(/[^\d.]/g, "");
-    // chỉ 1 dấu chấm
-    const parts = raw.split(".");
-    if (parts.length > 2) raw = parts[0] + "." + parts.slice(1).join("");
-    inp.value = raw;
+    // chỉ chặn ký tự lạ khi blur; khi gõ để user tự do
+    if (showStatus) {
+      raw = raw.replace(/[^\d.]/g, "");
+      const parts = raw.split(".");
+      if (parts.length > 2) raw = parts[0] + "." + parts.slice(1).join("");
+      inp.value = raw;
+    }
 
     const di = Number(inp.dataset.day);
     const small = $(`#daysGrid small[data-day-qty="${di}"]`);
     const qc = currentQC();
+    const checkRaw = String(inp.value || "").trim().replace(",", ".");
 
-    if (raw === "" || raw === ".") {
-      if (small) small.textContent = "";
-      inp.classList.remove("day-snap");
-      return;
-    }
-
-    const n = Number(raw);
-    if (!Number.isFinite(n)) {
-      if (small) small.textContent = "";
-      return;
-    }
-
-    if (!doSnap) {
-      // gõ dở: chỉ cảnh báo nếu đã lệch QC
-      if (qc && !TruNoLogic.isMultipleOfQC(n, qc)) {
-        if (small) small.textContent = `≠ bội ${fmt(qc)}`;
-        inp.classList.add("day-snap");
-      } else {
-        if (small) {
-          const pk = qc ? TruNoLogic.qtyToPackages(n, qc) : null;
-          small.textContent = pk != null ? `${pk} kiện` : "";
-        }
-        inp.classList.remove("day-snap");
+    if (checkRaw === "" || checkRaw === ".") {
+      if (small) {
+        small.textContent = "";
+        small.className = "day-qty";
       }
-      return;
+      inp.classList.remove("day-invalid");
+      return { ok: true, qty: null, message: "" };
     }
 
-    // blur/change: tự snap ngầm
-    const res = TruNoLogic.snapQtyToQC(n, qc);
-    if (res.value == null || res.value === 0) {
-      inp.value = "";
-      if (small) small.textContent = "";
-      inp.classList.remove("day-snap");
-      return;
+    const n = Number(checkRaw);
+    if (!Number.isFinite(n) || n < 0) {
+      if (small) {
+        small.textContent = "Số không hợp lệ";
+        small.className = "day-qty bad";
+      }
+      inp.classList.add("day-invalid");
+      return { ok: false, qty: null, message: `Ngày ${di + 1}: số không hợp lệ` };
     }
-    inp.value = fmt(res.value);
+
+    if (n === 0) {
+      if (small) {
+        small.textContent = "";
+        small.className = "day-qty";
+      }
+      inp.classList.remove("day-invalid");
+      return { ok: true, qty: null, message: "" };
+    }
+
+    // Có QC: phải là bội số nguyên của QC — KHÔNG tự đổi số user
+    if (qc && !TruNoLogic.isMultipleOfQC(n, qc)) {
+      const near = TruNoLogic.snapQtyToQC(n, qc);
+      if (small) {
+        small.textContent = `⚠ Lẻ QC — hãy chỉnh lại (gợi ý ${fmt(near.value)})`;
+        small.className = "day-qty bad";
+      }
+      inp.classList.add("day-invalid");
+      const msg = `SL nhập lẻ so với QC đóng gói (${fmt(qc)}). Ngày ${di + 1}: ${fmt(n)} không hợp lệ — hãy điều chỉnh lại (vd ${fmt(near.value)} = ${near.packages} kiện).`;
+      if (showStatus) setStatus(msg, "err");
+      return { ok: false, qty: n, message: msg };
+    }
+
+    const pk = qc ? TruNoLogic.qtyToPackages(n, qc) : null;
     if (small) {
-      small.textContent = res.packages != null ? `${res.packages} kiện × QC` : "";
+      small.textContent = pk != null ? `✓ ${pk} kiện × ${fmt(qc)}` : "✓";
+      small.className = "day-qty ok";
     }
-    if (res.snapped) {
-      inp.classList.add("day-snap");
-      setStatus(
-        `Ngày ${di + 1}: ${fmt(n)} lẻ so với QC ${fmt(qc)} → tự chỉnh ${fmt(res.value)} (cấp nguyên).`,
-        "info"
-      );
-      setTimeout(() => inp.classList.remove("day-snap"), 1200);
-    } else {
-      inp.classList.remove("day-snap");
-    }
+    inp.classList.remove("day-invalid");
+    if (showStatus) inp.value = fmt(n);
+    return { ok: true, qty: n, message: "" };
   }
 
+  /** Đọc days; nếu có ô lẻ QC → trả errors */
   function readDaysAsQty() {
-    const qc = currentQC();
     const days = Array(31).fill(null);
+    const errors = [];
     $$("#daysGrid input[data-day]").forEach((inp) => {
       const i = Number(inp.dataset.day);
-      // luôn snap trước khi đọc
-      onDayQtyInput(inp, true);
-      const raw = String(inp.value || "").trim();
-      if (raw === "") {
-        days[i] = null;
+      const res = validateDayInput(inp, false);
+      if (!res.ok) {
+        errors.push(res.message || `Ngày ${i + 1} không hợp lệ`);
+        days[i] = null; // không nhận giá trị lẻ
         return;
       }
-      const res = TruNoLogic.snapQtyToQC(Number(raw), qc);
-      days[i] = res.value != null && res.value > 0 ? res.value : null;
-      if (res.value != null && res.value > 0) inp.value = fmt(res.value);
+      days[i] = res.qty != null && res.qty > 0 ? res.qty : null;
     });
-    return days;
+    return { days, errors };
+  }
+
+  function validateAllDays() {
+    const { days, errors } = readDaysAsQty();
+    return { days, errors };
   }
 
   function showForm(show) {
@@ -470,29 +479,45 @@
   }
 
   function readForm() {
-    const days = readDaysAsQty();
-    return TruNoLogic.newRow({
-      id: $("#f_id").value || undefined,
-      A: $("#f_A").value,
-      B: $("#f_B").value,
-      C: $("#f_C").value,
-      D: $("#f_D").value || defaultPlant(),
-      E: $("#f_E").value.trim(),
-      F: $("#f_F").value.trim(),
-      G: $("#f_G").value.trim(),
-      H: $("#f_H").value || "KÍ",
-      I: $("#f_I").value === "" ? null : Number($("#f_I").value),
-      J: $("#f_J").value === "" ? 0 : Number($("#f_J").value),
-      days,
-      updatedBy: currentUser().name,
-      updatedAt: new Date().toISOString(),
-    });
+    const dayRes = validateAllDays();
+    return {
+      row: TruNoLogic.newRow({
+        id: $("#f_id").value || undefined,
+        A: $("#f_A").value,
+        B: $("#f_B").value,
+        C: $("#f_C").value,
+        D: $("#f_D").value || defaultPlant(),
+        E: $("#f_E").value.trim(),
+        F: $("#f_F").value.trim(),
+        G: $("#f_G").value.trim(),
+        H: $("#f_H").value || "KÍ",
+        I: $("#f_I").value === "" ? null : Number($("#f_I").value),
+        J: $("#f_J").value === "" ? 0 : Number($("#f_J").value),
+        days: dayRes.days,
+        updatedBy: currentUser().name,
+        updatedAt: new Date().toISOString(),
+      }),
+      dayErrors: dayRes.errors,
+    };
   }
 
   function saveRow() {
-    const row = readForm();
+    const { row, dayErrors } = readForm();
     if (!row.E || !row.F) {
       setStatus("Cần nhập «Số phiếu Lefaso» và «MÃ VẬT TƯ».", "err");
+      return;
+    }
+    if (dayErrors.length) {
+      setStatus(
+        "SL nhập lẻ so với QC đóng gói — hãy điều chỉnh lại trước khi lưu. " + dayErrors[0],
+        "err"
+      );
+      // mở panel ngày để user thấy ô đỏ
+      state.daysOpen = true;
+      $("#daysPanel").classList.add("open");
+      $("#btnToggleDays").textContent = "Ẩn ngày";
+      const bad = $("#daysGrid input.day-invalid");
+      if (bad) bad.focus();
       return;
     }
     // auto map name if empty
@@ -511,11 +536,9 @@
     recomputeSheet();
     const savedId = row.id || list[list.length - 1].id;
     state.selectedId = savedId;
-    // map ngay sang danh sach
     renderAll();
     const saved = rowsOfSheet().find((r) => r.id === savedId);
     if (saved) fillForm(saved, "edit");
-    // scroll active row into view
     const tr = $(`#gridBody tr[data-id="${savedId}"]`);
     if (tr) tr.scrollIntoView({ block: "nearest", behavior: "smooth" });
     setStatus(
