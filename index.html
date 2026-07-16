@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Theo dõi trừ nợ vật tư</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>📦 Theo dõi trừ nợ vật tư</h1>
+      <div class="sub">Logic VBA · Quét lùi nhiều phiếu · I / K / L / M / AT / AU · 5 user · GitHub storage</div>
+    </div>
+    <div class="toolbar">
+      <label>
+        <span class="badge">User</span>
+        <select id="userSelect"></select>
+      </label>
+      <button class="btn btn-ghost" id="btnLoad" type="button">⟳ Tải GitHub</button>
+      <button class="btn btn-ok" id="btnSaveGh" type="button">☁ Lưu GitHub</button>
+      <button class="btn btn-warn" id="btnToken" type="button">🔑 Token</button>
+      <button class="btn btn-primary" id="btnRecalc" type="button">Σ Tính lại</button>
+      <button class="btn btn-ghost" id="btnDemo" type="button">Demo</button>
+      <button class="btn btn-ghost" id="btnExport" type="button">Export JSON</button>
+      <label class="btn btn-ghost" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+        Import
+        <input type="file" id="fileImport" accept="application/json" hidden />
+      </label>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel">
+      <h2>Thêm / Sửa dòng</h2>
+      <input type="hidden" id="f_id" />
+      <div class="form-grid">
+        <label>Ngày phiếu (A)
+          <input type="date" id="f_A" />
+        </label>
+        <label>Nhà máy (D)
+          <select id="f_D">
+            <option>PHC</option>
+            <option>LAF</option>
+            <option>LVF</option>
+          </select>
+        </label>
+        <label class="full">Số phiếu (E) *
+          <input type="text" id="f_E" placeholder="OI2602483" />
+        </label>
+        <label>Mã VT (F) *
+          <input type="text" id="f_F" placeholder="009200" />
+        </label>
+        <label>QC (I) — phiếu gốc
+          <input type="number" id="f_I" step="any" placeholder="25" />
+        </label>
+        <label class="full">Tên VT (G)
+          <input type="text" id="f_G" />
+        </label>
+        <label>SL hệ thống (J)
+          <input type="number" id="f_J" step="any" value="0" />
+        </label>
+        <label>Cấp phát ngày (days)
+          <input type="text" id="f_days" placeholder="25,0,10" />
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="btnSaveRow" type="button">Lưu dòng</button>
+        <button class="btn btn-ghost" id="btnClearForm" type="button">Xóa form</button>
+      </div>
+      <div id="status" class="status info">Sẵn sàng.</div>
+      <p id="tokenHint" class="help" style="margin-top:8px"></p>
+      <p id="metaLine" class="help"></p>
+
+      <h2 style="margin-top:18px">Quy tắc (agent)</h2>
+      <div class="rules">
+        <p><code>K/L</code>: quét lùi nhiều phiếu cùng Mã VT → lấy AS.</p>
+        <p>AS&gt;0 → <code>K</code> · AS&lt;0 → <code>L=|AS|</code> · AS=0 → OK đóng.</p>
+        <p><code>M</code>: có K → <code>J−K</code> · có L → <code>J+L</code>.</p>
+        <p><code>AT</code>: so |AS| với QC (I).</p>
+        <p><code>AU</code>: số phiếu nguồn đã chuyển AS.</p>
+        <p>Chi tiết: <code>agent/SKILL.md</code></p>
+      </div>
+    </aside>
+
+    <section class="panel">
+      <h2>Bảng trừ nợ (sau auto-fill)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Ngày</th>
+              <th>NM</th>
+              <th>Số phiếu</th>
+              <th>Mã VT</th>
+              <th>Tên</th>
+              <th>I(QC)</th>
+              <th>J</th>
+              <th>K</th>
+              <th>L</th>
+              <th>M</th>
+              <th>AS</th>
+              <th>AT</th>
+              <th>AU</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tblBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Repo:
+    <a href="https://github.com/mrbit4578/THEO-DOI-TRU-NO-VAT-TU" target="_blank" rel="noopener">
+      mrbit4578/THEO-DOI-TRU-NO-VAT-TU
+    </a>
+    · GitHub Pages · Data: <code>data/store.json</code>
+  </footer>
+
+  <script src="js/logic.js"></script>
+  <script src="js/github-store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

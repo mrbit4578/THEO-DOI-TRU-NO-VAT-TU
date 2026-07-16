@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "users": [
+    { "id": "u1", "name": "User 1", "role": "editor" },
+    { "id": "u2", "name": "User 2", "role": "editor" },
+    { "id": "u3", "name": "User 3", "role": "editor" },
+    { "id": "u4", "name": "User 4", "role": "editor" },
+    { "id": "u5", "name": "User 5", "role": "editor" }
+  ],
+  "meta": {
+    "title": "Theo dõi trừ nợ vật tư",
+    "plant": "PHC",
+    "updatedAt": "",
+    "updatedBy": ""
+  },
+  "rows": []
+}
