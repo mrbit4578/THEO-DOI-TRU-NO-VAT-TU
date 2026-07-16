@@ -3,123 +3,209 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Theo dõi trừ nợ vật tư</title>
+  <title>THEO DÕI TRỪ NỢ NHÀ MÀY &amp; KHO</title>
   <link rel="stylesheet" href="css/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📗</text></svg>" />
 </head>
 <body>
-  <header class="app-header">
-    <div>
-      <h1>📦 Theo dõi trừ nợ vật tư</h1>
-      <div class="sub">Logic VBA · Quét lùi nhiều phiếu · I / K / L / M / AT / AU · 5 user · GitHub storage</div>
+  <!-- Excel-like ribbon -->
+  <div class="ribbon">
+    <div class="ribbon-top">
+      <div class="ribbon-title">
+        📗 THEO DÕI TRỪ NỢ NHÀ MÀY &amp; KHO
+        <small>Web · GitHub multi-user</small>
+        <span class="help-chip" id="btnGuide" title="Hướng dẫn token">❓ Hướng dẫn Token</span>
+      </div>
+      <div class="ribbon-actions">
+        <select id="userSelect" title="Chọn user (1–5)"></select>
+        <button class="btn" type="button" id="btnLoad">⟳ Tải GitHub</button>
+        <button class="btn btn-solid" type="button" id="btnSaveGh">☁ Lưu GitHub</button>
+        <button class="btn btn-warn" type="button" id="btnToken">🔑 Token</button>
+        <button class="btn" type="button" id="btnRecalc">Σ Tính lại</button>
+        <button class="btn" type="button" id="btnAdd">＋ Thêm dòng</button>
+        <button class="btn" type="button" id="btnDemo">Demo</button>
+        <button class="btn" type="button" id="btnExport">Export</button>
+        <label class="btn" style="cursor:pointer">
+          Import
+          <input type="file" id="fileImport" accept="application/json,.json" hidden />
+        </label>
+      </div>
     </div>
-    <div class="toolbar">
-      <label>
-        <span class="badge">User</span>
-        <select id="userSelect"></select>
+    <div class="ribbon-sub">
+      <label>Chọn Tháng / Năm
+        <input type="number" id="metaMonth" min="1" max="12" /> /
+        <input type="number" id="metaYear" min="2020" max="2100" />
       </label>
-      <button class="btn btn-ghost" id="btnLoad" type="button">⟳ Tải GitHub</button>
-      <button class="btn btn-ok" id="btnSaveGh" type="button">☁ Lưu GitHub</button>
-      <button class="btn btn-warn" id="btnToken" type="button">🔑 Token</button>
-      <button class="btn btn-primary" id="btnRecalc" type="button">Σ Tính lại</button>
-      <button class="btn btn-ghost" id="btnDemo" type="button">Demo</button>
-      <button class="btn btn-ghost" id="btnExport" type="button">Export JSON</button>
-      <label class="btn btn-ghost" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
-        Import
-        <input type="file" id="fileImport" accept="application/json" hidden />
+      <label>Lọc
+        <input type="text" id="filterQ" placeholder="Số phiếu, mã VT, tên…" style="min-width:180px;background:#fff;color:#111;border:1px solid #ccc;border-radius:3px;padding:3px 8px" />
       </label>
+      <span id="tokenHint"></span>
+      <span>Cập nhật: <strong id="metaUpdated">—</strong></span>
+      <span id="metaCount"></span>
     </div>
-  </header>
+  </div>
 
-  <main class="layout">
-    <aside class="panel">
-      <h2>Thêm / Sửa dòng</h2>
+  <div class="sheet-tabs">
+    <button type="button" class="sheet-tab active" data-sheet="PHC">PHC</button>
+    <button type="button" class="sheet-tab" data-sheet="NM LAF">NM LAF</button>
+    <button type="button" class="sheet-tab" data-sheet="NM LVF">NM LVF</button>
+  </div>
+
+  <div class="status-bar">
+    <span id="statusMsg" class="info">Sẵn sàng.</span>
+  </div>
+
+  <div class="workspace">
+    <div class="workbook-title">
+      <div class="meta">File mẫu Excel · tiêu đề cột giữ nguyên</div>
+      <div class="main">THEO DÕI TRỪ NỢ NHÀ MÀY &amp; KHO</div>
+      <div class="right">Chi tiết từng ngày cấp phát thực tế kho &amp; xưởng giao nhận</div>
+    </div>
+
+    <div class="legend">
+      <span><i class="swatch y"></i> QC / K / L (auto)</span>
+      <span><i class="swatch c"></i> So phieu nguon chuyen qua (AU)</span>
+      <span><i class="swatch o"></i> SL còn lại so với QC đóng gói (AT)</span>
+      <span>Sửa trực tiếp ô → Enter · M = J−K (có K) hoặc J+L (có L)</span>
+    </div>
+
+    <div class="grid-wrap">
+      <table class="xl-grid" id="xlGrid">
+        <thead id="gridHead"></thead>
+        <tbody id="gridBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Repo:
+    <a href="https://github.com/mrbit4578/THEO-DOI-TRU-NO-VAT-TU" target="_blank" rel="noopener">mrbit4578/THEO-DOI-TRU-NO-VAT-TU</a>
+    · Data: <code>data/store.json</code>
+  </div>
+
+  <!-- Drawer add/edit -->
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="drawer">
+    <header>
+      <span id="drawerTitle">Thêm dòng mới</span>
+      <button type="button" class="btn" id="btnDrawerClose" style="border-color:rgba(255,255,255,.5)">✕</button>
+    </header>
+    <div class="body">
       <input type="hidden" id="f_id" />
       <div class="form-grid">
-        <label>Ngày phiếu (A)
+        <label>Ngày Phiếu
           <input type="date" id="f_A" />
         </label>
-        <label>Nhà máy (D)
-          <select id="f_D">
-            <option>PHC</option>
-            <option>LAF</option>
-            <option>LVF</option>
-          </select>
+        <label>Chỉ thị
+          <input type="text" id="f_B" />
         </label>
-        <label class="full">Số phiếu (E) *
+        <label class="full">Code Màu đơn hàng
+          <input type="text" id="f_C" />
+        </label>
+        <label>Nhà máy
+          <input type="text" id="f_D" placeholder="PHC" />
+        </label>
+        <label>ĐVT
+          <input type="text" id="f_H" value="KÍ" />
+        </label>
+        <label class="full">Số phiếu Lefaso *
           <input type="text" id="f_E" placeholder="OI2602483" />
         </label>
-        <label>Mã VT (F) *
+        <label>MÃ VẬT TƯ *
           <input type="text" id="f_F" placeholder="009200" />
         </label>
-        <label>QC (I) — phiếu gốc
-          <input type="number" id="f_I" step="any" placeholder="25" />
+        <label>QC đóng gói
+          <input type="number" id="f_I" step="any" placeholder="phiếu gốc" />
         </label>
-        <label class="full">Tên VT (G)
+        <label class="full">TÊN VẬT TƯ
           <input type="text" id="f_G" />
         </label>
-        <label>SL hệ thống (J)
+        <label>SL hệ thống
           <input type="number" id="f_J" step="any" value="0" />
         </label>
-        <label>Cấp phát ngày (days)
-          <input type="text" id="f_days" placeholder="25,0,10" />
+        <label class="full">Cấp phát theo ngày (1→31, cách nhau dấu phẩy)
+          <input type="text" id="f_days" placeholder="vd: 25,,,,10" />
         </label>
       </div>
-      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="btnSaveRow" type="button">Lưu dòng</button>
-        <button class="btn btn-ghost" id="btnClearForm" type="button">Xóa form</button>
-      </div>
-      <div id="status" class="status info">Sẵn sàng.</div>
-      <p id="tokenHint" class="help" style="margin-top:8px"></p>
-      <p id="metaLine" class="help"></p>
+      <p style="font-size:.8rem;color:#607d8b;margin-top:12px">
+        K / L / M / AT / AU / SL Thừa/Thiếu tự tính sau khi lưu dòng.
+      </p>
+    </div>
+    <footer>
+      <button type="button" class="btn" id="btnDrawerSave">Lưu dòng</button>
+      <button type="button" class="btn ghost" id="btnDrawerCancel">Hủy</button>
+    </footer>
+  </aside>
 
-      <h2 style="margin-top:18px">Quy tắc (agent)</h2>
-      <div class="rules">
-        <p><code>K/L</code>: quét lùi nhiều phiếu cùng Mã VT → lấy AS.</p>
-        <p>AS&gt;0 → <code>K</code> · AS&lt;0 → <code>L=|AS|</code> · AS=0 → OK đóng.</p>
-        <p><code>M</code>: có K → <code>J−K</code> · có L → <code>J+L</code>.</p>
-        <p><code>AT</code>: so |AS| với QC (I).</p>
-        <p><code>AU</code>: số phiếu nguồn đã chuyển AS.</p>
-        <p>Chi tiết: <code>agent/SKILL.md</code></p>
-      </div>
-    </aside>
+  <!-- Token guide modal -->
+  <div class="modal-backdrop" id="guideModal">
+    <div class="modal">
+      <header>
+        <span>🔑 Hướng dẫn lấy GitHub Token cho 5 user</span>
+        <button type="button" class="btn" id="btnCloseGuide" style="border-color:rgba(255,255,255,.4)">✕</button>
+      </header>
+      <div class="body">
+        <p>
+          Mỗi user cần <strong>Personal Access Token (PAT)</strong> để <em>đọc/ghi</em>
+          file <code>data/store.json</code> trên repo
+          <code>mrbit4578/THEO-DOI-TRU-NO-VAT-TU</code>.
+        </p>
 
-    <section class="panel">
-      <h2>Bảng trừ nợ (sau auto-fill)</h2>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Ngày</th>
-              <th>NM</th>
-              <th>Số phiếu</th>
-              <th>Mã VT</th>
-              <th>Tên</th>
-              <th>I(QC)</th>
-              <th>J</th>
-              <th>K</th>
-              <th>L</th>
-              <th>M</th>
-              <th>AS</th>
-              <th>AT</th>
-              <th>AU</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tblBody"></tbody>
-        </table>
-      </div>
-    </section>
-  </main>
+        <h3>Cách A — Fine-grained token (khuyến nghị, an toàn hơn)</h3>
+        <ol>
+          <li>Đăng nhập GitHub → bấm avatar góc phải → <strong>Settings</strong>.</li>
+          <li>Cuối menu trái: <strong>Developer settings</strong>.</li>
+          <li><strong>Personal access tokens</strong> → <strong>Fine-grained tokens</strong> → <strong>Generate new token</strong>.</li>
+          <li>Đặt tên: <code>truno-user1</code> (hoặc user2…5), hạn dùng 30–90 ngày.</li>
+          <li><strong>Resource owner</strong>: chọn tài khoản <code>mrbit4578</code> (hoặc org sở hữu repo).</li>
+          <li><strong>Repository access</strong>: <em>Only select repositories</em> → chọn
+            <code>THEO-DOI-TRU-NO-VAT-TU</code>.</li>
+          <li><strong>Permissions → Repository permissions</strong>:
+            <ul>
+              <li><strong>Contents</strong>: <em>Read and write</em></li>
+              <li><strong>Metadata</strong>: Read-only (tự bật)</li>
+            </ul>
+          </li>
+          <li>Bấm <strong>Generate token</strong> → <strong>copy ngay</strong> (chỉ hiện 1 lần).</li>
+        </ol>
 
-  <footer class="footer">
-    Repo:
-    <a href="https://github.com/mrbit4578/THEO-DOI-TRU-NO-VAT-TU" target="_blank" rel="noopener">
-      mrbit4578/THEO-DOI-TRU-NO-VAT-TU
-    </a>
-    · GitHub Pages · Data: <code>data/store.json</code>
-  </footer>
+        <h3>Cách B — Classic token (nhanh)</h3>
+        <ol>
+          <li><strong>Developer settings</strong> → <strong>Personal access tokens</strong> → <strong>Tokens (classic)</strong>.</li>
+          <li><strong>Generate new token (classic)</strong>.</li>
+          <li>Tick scope: <strong><code>repo</code></strong> (full control of private repositories).
+            Nếu repo <em>public</em> và chỉ cần contents, có thể dùng fine-grained như Cách A.</li>
+          <li>Generate → copy token.</li>
+        </ol>
+
+        <h3>Đưa token cho từng user</h3>
+        <ol>
+          <li>Gửi token <strong>riêng</strong> qua kênh nội bộ (không chat public, không commit vào git).</li>
+          <li>User mở web app → bấm <strong>🔑 Token</strong> → dán token → <strong>Lưu token</strong>.</li>
+          <li>Token chỉ lưu trên <em>trình duyệt máy đó</em> (localStorage), không upload đi đâu khác ngoài GitHub API.</li>
+          <li>Chọn User 1…5 → <strong>Tải GitHub</strong> → sửa → <strong>Lưu GitHub</strong>.</li>
+        </ol>
+
+        <div class="tip">
+          <strong>Mẹo 5 user:</strong> tạo 5 fine-grained token (user1…user5), cùng quyền Contents R/W trên 1 repo.
+          Khi user nghỉ việc → revoke token đó trong GitHub Settings.
+        </div>
+        <div class="warn">
+          <strong>Cảnh báo:</strong> Ai có token + quyền write đều sửa được <code>store.json</code>.
+          Không đưa token cho người ngoài. Không chụp màn hình token lên group chat.
+        </div>
+
+        <h3>Dán token tại đây</h3>
+        <label style="display:block;font-size:.85rem;color:#555;margin-bottom:4px">GitHub Personal Access Token</label>
+        <input type="password" id="tokenInput" placeholder="github_pat_… hoặc ghp_…" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font-family:ui-monospace,monospace" />
+      </div>
+      <footer>
+        <button type="button" class="btn" id="btnSaveTokenModal">Lưu token</button>
+        <a class="btn" style="background:#24292f;text-decoration:none;display:inline-block" href="https://github.com/settings/tokens" target="_blank" rel="noopener">Mở trang Token GitHub</a>
+        <a class="btn" style="background:#0969da;text-decoration:none;display:inline-block" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Tạo Fine-grained token</a>
+      </footer>
+    </div>
+  </div>
 
   <script src="js/logic.js"></script>
   <script src="js/github-store.js"></script>

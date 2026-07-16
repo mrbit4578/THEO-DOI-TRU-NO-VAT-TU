@@ -1,76 +1,59 @@
-# Theo dõi trừ nợ vật tư
+# THEO DÕI TRỪ NỢ NHÀ MÀY & KHO
 
-Web app + Agent nghiệp vụ: **THEO DÕI TRỪ NỢ KHO ↔ XƯỞNG** (logic port từ VBA Excel).
+Web app layout **giống file Excel**, tiêu đề cột **giữ nguyên**, tương tác tối ưu hơn.
 
 - **Repo:** https://github.com/mrbit4578/THEO-DOI-TRU-NO-VAT-TU  
-- **Local:** `Y:\ĐƠN HÀNG 2026\DỰ ÁN NHỎ\THEO-DOI-TRU-NO-VAT-TU`  
-- **Agent:** [`agent/SKILL.md`](agent/SKILL.md)
+- **Local:** `E:\01-Grok-2026\projects\THEO-DOI-TRU-NO-VAT-TU`  
+- **Agent:** [`agent/SKILL.md`](agent/SKILL.md)  
+- **Token 5 user:** [`docs/HUONG-DAN-TOKEN-GITHUB.md`](docs/HUONG-DAN-TOKEN-GITHUB.md)
 
-## Tính năng
+## Tiêu đề cột (đúng Excel)
 
-| Chức năng | Mô tả |
-|-----------|--------|
-| Auto-fill I | QC theo mã VT (phiếu gốc / quét lùi) |
-| Auto-fill K/L | Quét lùi **nhiều số phiếu** lấy AS cùng mã VT |
-| Cột M | `J−K` nếu có K · `J+L` nếu có L |
-| Cột AT | So \|AS\| với QC |
-| Cột AU | Số phiếu nguồn chuyển AS |
-| 5 user | Chọn user, ghi `updatedBy` khi lưu |
-| GitHub storage | `data/store.json` qua Contents API |
+| Cột | Tiêu đề |
+|-----|---------|
+| A | Ngày Phiếu |
+| B | Chỉ thị |
+| C | Code Màu đơn hàng |
+| D | Nhà máy |
+| E | Số phiếu Lefaso |
+| F | MÃ VẬT TƯ |
+| G | TÊN VẬT TƯ |
+| H | ĐVT |
+| I | QC đóng gói |
+| J | SL hệ thống |
+| K | SL xưởng nợ kho |
+| L | SL kho nợ xưởng |
+| M | SL cần lấy |
+| 1…31 | Chi tiết từng ngày cấp phát… |
+| AS | SL Thừa/Thiếu |
+| AT | SL còn lại so với QC đóng gói |
+| AU | So phieu nguon chuyen qua |
+
+## UX
+
+- Ribbon xanh kiểu Excel + sheet tabs **PHC / NM LAF / NM LVF**
+- Sửa **trực tiếp trên lưới** (Enter để lưu ô)
+- Form **Thêm dòng** (drawer)
+- Lọc theo phiếu / mã / tên
+- Chọn **Tháng / Năm**
+- Auto: I, K/L (quét lùi nhiều phiếu), M (J−K / J+L), AT, AU
+- 5 user + **Lưu/Tải GitHub** (`data/store.json`)
 
 ## Chạy local
 
-Mở bằng static server (tránh CORS file://):
-
 ```bash
-# Node
+cd E:\01-Grok-2026\projects\THEO-DOI-TRU-NO-VAT-TU
 npx --yes serve -l 5173 .
-
-# hoặc Python
-python -m http.server 5173
 ```
 
-Vào http://localhost:5173
+## GitHub Pages
 
-## Deploy online (GitHub Pages)
+Settings → Pages → **GitHub Actions**  
+URL: `https://mrbit4578.github.io/THEO-DOI-TRU-NO-VAT-TU/`
 
-1. Bật **Settings → Pages → Source: GitHub Actions**
-2. Push nhánh `main` (workflow `.github/workflows/pages.yml`)
-3. URL dạng:  
-   `https://mrbit4578.github.io/THEO-DOI-TRU-NO-VAT-TU/`
+## Token cho user
 
-## 5 user cập nhật online
-
-1. Tạo **Fine-grained PAT** (hoặc classic) với quyền **Contents: Read and write** trên repo này.
-2. Trên web app: bấm **🔑 Token** → dán PAT (lưu localStorage trình duyệt).
-3. Mỗi người chọn **User 1…5**, sửa dữ liệu → **☁ Lưu GitHub**.
-4. Người khác bấm **⟳ Tải GitHub** để lấy bản mới.
-
-> Nếu hai người lưu cùng lúc có thể **xung đột SHA** — tải lại rồi lưu lại (optimistic locking).
-
-**Bảo mật:** không commit token vào git. Mỗi user giữ PAT riêng hoặc dùng 1 token chung nội bộ (rủi ro chia sẻ).
-
-## Cấu trúc
-
-```
-├── index.html
-├── css/styles.css
-├── js/logic.js          # quy tắc nghiệp vụ
-├── js/github-store.js   # GitHub API
-├── js/app.js            # UI
-├── data/store.json      # bộ nhớ chung
-├── agent/SKILL.md       # agent kiến thức
-└── .github/workflows/pages.yml
-```
-
-## Quy tắc M (quan trọng)
-
-```
-có K (AS→K)  →  M = J - K
-có L (AS→L)  →  M = J + L
-không K/L    →  M = J
-```
-
-## License
-
-Internal / private use — mrbit4578
+1. Tạo Fine-grained PAT: Contents **Read and write** trên repo này  
+2. User: web → **🔑 Token** → dán → Lưu  
+3. Chi tiết từng bước: [docs/HUONG-DAN-TOKEN-GITHUB.md](docs/HUONG-DAN-TOKEN-GITHUB.md)  
+   (trong app: nút **❓ Hướng dẫn Token**)
