@@ -15,11 +15,99 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function sumDays(row) {
+    const days = Array.isArray(row.days) ? row.days : [];
+    return days.reduce((s, d) => s + (num(d) || 0), 0);
+  }
+
   function calcAS(row) {
     const j = num(row.J) || 0;
+    return sumDays(row) - j;
+  }
+
+  /** SL thực cấp = tổng cấp phát các ngày */
+  function calcSLThucCap(row) {
+    return sumDays(row);
+  }
+
+  /**
+   * Ngày thực cấp: ngày cuối cùng trong tháng có cấp phát > 0
+   * format YYYY-MM-DD theo month/year (meta)
+   */
+  function calcNgayThucCap(row, month, year) {
     const days = Array.isArray(row.days) ? row.days : [];
-    const sum = days.reduce((s, d) => s + (num(d) || 0), 0);
-    return sum - j;
+    let last = 0;
+    for (let i = 0; i < days.length; i++) {
+      if ((num(days[i]) || 0) > 0) last = i + 1;
+    }
+    if (!last) return "";
+    const m = Number(month) || 1;
+    const y = Number(year) || new Date().getFullYear();
+    const mm = String(m).padStart(2, "0");
+    const dd = String(last).padStart(2, "0");
+    return `${y}-${mm}-${dd}`;
+  }
+
+  /** Danh sách ngày có cấp (1..31) */
+  function daysIssuedList(row) {
+    const days = Array.isArray(row.days) ? row.days : [];
+    const out = [];
+    for (let i = 0; i < days.length; i++) {
+      if ((num(days[i]) || 0) > 0) out.push(i + 1);
+    }
+    return out;
+  }
+
+  /** Catalog vật tư từ nhiều sheet: { ma, ten, qc, dvt } */
+  function buildMaterialCatalog(sheetsOrRows) {
+    const map = new Map();
+    const pushRow = (r) => {
+      const ma = String(r.F || "").trim();
+      if (!ma) return;
+      const ten = String(r.G || "").trim();
+      const qc = num(r.I);
+      const dvt = String(r.H || "").trim();
+      const prev = map.get(ma) || { ma, ten: "", qc: null, dvt: "KÍ" };
+      if (ten) prev.ten = ten;
+      if (qc !== null) prev.qc = qc;
+      if (dvt) prev.dvt = dvt;
+      map.set(ma, prev);
+    };
+    if (Array.isArray(sheetsOrRows)) {
+      sheetsOrRows.forEach(pushRow);
+    } else if (sheetsOrRows && typeof sheetsOrRows === "object") {
+      Object.values(sheetsOrRows).forEach((arr) => {
+        if (Array.isArray(arr)) arr.forEach(pushRow);
+      });
+    }
+    return Array.from(map.values()).sort((a, b) => a.ma.localeCompare(b.ma));
+  }
+
+  function searchMaterials(catalog, query, limit = 20) {
+    const q = String(query || "").trim().toLowerCase();
+    if (!q) return catalog.slice(0, limit);
+    return catalog
+      .filter(
+        (m) =>
+          m.ma.toLowerCase().includes(q) ||
+          String(m.ten || "").toLowerCase().includes(q)
+      )
+      .slice(0, limit);
+  }
+
+  /** Làm tròn số kiện nguyên; SL = kiện * QC */
+  function packagesToQty(packages, qc) {
+    const p = Math.max(0, Math.round(num(packages) || 0));
+    const q = num(qc);
+    if (!q || q <= 0) return p; // không có QC thì coi input là SL thô
+    return p * q;
+  }
+
+  function qtyToPackages(qty, qc) {
+    const q = num(qc);
+    const v = num(qty) || 0;
+    if (!q || q <= 0) return v;
+    return Math.round(v / q);
   }
 
   function voucherOrder(rows) {
@@ -91,9 +179,15 @@
     return MSG.EQ;
   }
 
-  function autoFill(rowsIn) {
+  function autoFill(rowsIn, opts) {
+    const month = opts && opts.month;
+    const year = opts && opts.year;
     const rows = rowsIn.map((r) => ({ ...r, days: [...(r.days || [])] }));
-    for (const r of rows) r.AS = calcAS(r);
+    for (const r of rows) {
+      r.AS = calcAS(r);
+      r.SL_thuc_cap = calcSLThucCap(r);
+      r.Ngay_thuc_cap = calcNgayThucCap(r, month, year);
+    }
 
     const first = firstVoucher(rows);
 
@@ -104,6 +198,8 @@
       if (!ma || !ph) continue;
 
       r.AS = calcAS(r);
+      r.SL_thuc_cap = calcSLThucCap(r);
+      r.Ngay_thuc_cap = calcNgayThucCap(r, month, year);
 
       if (ph === first) {
         r.K = null;
@@ -177,6 +273,8 @@
       M: null,
       days: partial.days || [],
       AS: null,
+      SL_thuc_cap: null,
+      Ngay_thuc_cap: "",
       AT: "",
       AU: "",
       note: partial.note || "",
@@ -240,6 +338,14 @@
     MSG,
     num,
     calcAS,
+    sumDays,
+    calcSLThucCap,
+    calcNgayThucCap,
+    daysIssuedList,
+    buildMaterialCatalog,
+    searchMaterials,
+    packagesToQty,
+    qtyToPackages,
     autoFill,
     newRow,
     sampleData,

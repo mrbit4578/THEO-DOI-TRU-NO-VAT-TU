@@ -140,6 +140,8 @@
                   <th>SL kho nợ xưởng</th>
                   <th>SL cần lấy</th>
                   <th>SL Thừa/Thiếu</th>
+                  <th>SL thực cấp</th>
+                  <th>Ngày thực cấp</th>
                   <th>SL còn lại so với QC đóng gói</th>
                   <th>So phieu nguon chuyen qua</th>
                 </tr>
@@ -192,17 +194,20 @@
                 </label>
 
                 <div class="section-title">Vật tư</div>
-                <label class="form-field">
-                  <span>MÃ VẬT TƯ *</span>
-                  <input type="text" id="f_F" placeholder="009200" autocomplete="off" />
+                <label class="form-field full">
+                  <span>MÃ VẬT TƯ * (tìm nhanh)</span>
+                  <div class="ma-search" id="maSearchWrap">
+                    <input type="text" id="f_F" placeholder="Gõ mã hoặc tên vật tư…" autocomplete="off" />
+                    <div class="ma-dropdown" id="maDropdown" hidden></div>
+                  </div>
                 </label>
                 <label class="form-field">
                   <span>ĐVT</span>
                   <input type="text" id="f_H" value="KÍ" />
                 </label>
                 <label class="form-field full">
-                  <span>TÊN VẬT TƯ</span>
-                  <input type="text" id="f_G" />
+                  <span>TÊN VẬT TƯ (tự map khi chọn mã)</span>
+                  <input type="text" id="f_G" readonly class="mapped" />
                 </label>
                 <label class="form-field accent-y">
                   <span>QC đóng gói</span>
@@ -230,6 +235,14 @@
                   <span>SL Thừa/Thiếu</span>
                   <input type="text" id="f_AS" readonly />
                 </label>
+                <label class="form-field readonly">
+                  <span>SL thực cấp</span>
+                  <input type="text" id="f_SLTC" readonly />
+                </label>
+                <label class="form-field readonly">
+                  <span>Ngày thực cấp</span>
+                  <input type="text" id="f_NgayTC" readonly />
+                </label>
                 <label class="form-field full accent-o readonly">
                   <span>SL còn lại so với QC đóng gói</span>
                   <input type="text" id="f_AT" readonly />
@@ -243,6 +256,7 @@
                   <div class="section-title" style="border:none;padding:0;margin:0">Chi tiết từng ngày cấp phát (1–31)</div>
                   <button type="button" class="btn btn-ghost" id="btnToggleDays">Hiện ngày</button>
                 </div>
+                <p class="days-hint" id="daysHint">Nhập <b>số kiện nguyên</b> (× QC đóng gói). VD QC=25, nhập 2 → cấp 50.</p>
                 <div class="days-panel" id="daysPanel">
                   <div class="days-grid" id="daysGrid"></div>
                 </div>

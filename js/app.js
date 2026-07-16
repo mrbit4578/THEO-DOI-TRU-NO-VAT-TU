@@ -12,8 +12,9 @@
     selectedId: null,
     filter: "",
     daysOpen: false,
-    mode: "view", // view | edit | create
+    mode: "view",
     store: emptyStore(),
+    maPickIndex: -1,
   };
 
   function emptyStore() {
@@ -71,6 +72,14 @@
       .replace(/"/g, "&quot;");
   }
 
+  function fillOpts() {
+    return { month: state.month, year: state.year };
+  }
+
+  function materialCatalog() {
+    return TruNoLogic.buildMaterialCatalog(state.store.sheets);
+  }
+
   function normalizeStore(data) {
     const base = emptyStore();
     if (!data) return base;
@@ -92,18 +101,111 @@
   }
 
   function recomputeSheet() {
-    state.store.sheets[state.sheet] = TruNoLogic.autoFill(rowsOfSheet());
+    state.store.sheets[state.sheet] = TruNoLogic.autoFill(rowsOfSheet(), fillOpts());
   }
 
   function recomputeAll() {
     for (const s of SHEETS) {
-      state.store.sheets[s] = TruNoLogic.autoFill(state.store.sheets[s] || []);
+      state.store.sheets[s] = TruNoLogic.autoFill(state.store.sheets[s] || [], fillOpts());
     }
   }
 
   function defaultPlant() {
     if (state.sheet === "PHC") return "PHC";
     return state.sheet.replace("NM ", "");
+  }
+
+  function currentQC() {
+    const v = Number($("#f_I").value);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  }
+
+  /* ---------- material search ---------- */
+  function hideMaDropdown() {
+    const dd = $("#maDropdown");
+    if (dd) {
+      dd.hidden = true;
+      dd.innerHTML = "";
+    }
+    state.maPickIndex = -1;
+  }
+
+  function showMaDropdown(items) {
+    const dd = $("#maDropdown");
+    if (!items.length) {
+      dd.hidden = true;
+      dd.innerHTML = `<div class="ma-empty">Không tìm thấy mã / tên</div>`;
+      dd.hidden = false;
+      return;
+    }
+    dd.innerHTML = items
+      .map(
+        (m, i) => `<button type="button" class="ma-item ${i === state.maPickIndex ? "active" : ""}" data-ma="${escapeHtml(m.ma)}" data-idx="${i}">
+        <strong>${escapeHtml(m.ma)}</strong>
+        <span>${escapeHtml(m.ten || "—")}</span>
+        <em>QC ${m.qc != null ? fmt(m.qc) : "—"} · ${escapeHtml(m.dvt || "")}</em>
+      </button>`
+      )
+      .join("");
+    dd.hidden = false;
+    dd.querySelectorAll(".ma-item").forEach((btn) => {
+      btn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        applyMaterial(btn.dataset.ma);
+      });
+    });
+  }
+
+  function applyMaterial(ma) {
+    const cat = materialCatalog();
+    const m = cat.find((x) => x.ma === ma);
+    if (!m) return;
+    $("#f_F").value = m.ma;
+    $("#f_G").value = m.ten || "";
+    if (m.qc != null) $("#f_I").value = m.qc;
+    if (m.dvt) $("#f_H").value = m.dvt;
+    hideMaDropdown();
+    updateDaysHint();
+    // refresh package displays if days open
+    if (state.daysOpen) {
+      const days = readDaysAsQty();
+      buildDaysGrid(days);
+    }
+    setStatus(`Đã map: ${m.ma} → ${m.ten || ""} (QC ${fmt(m.qc)})`, "ok");
+  }
+
+  function onMaInput() {
+    const q = $("#f_F").value;
+    const items = TruNoLogic.searchMaterials(materialCatalog(), q, 25);
+    state.maPickIndex = items.length ? 0 : -1;
+    showMaDropdown(items);
+  }
+
+  function onMaKeydown(e) {
+    const dd = $("#maDropdown");
+    if (dd.hidden) {
+      if (e.key === "ArrowDown") onMaInput();
+      return;
+    }
+    const items = Array.from(dd.querySelectorAll(".ma-item"));
+    if (!items.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      state.maPickIndex = Math.min(items.length - 1, state.maPickIndex + 1);
+      items.forEach((el, i) => el.classList.toggle("active", i === state.maPickIndex));
+      items[state.maPickIndex]?.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      state.maPickIndex = Math.max(0, state.maPickIndex - 1);
+      items.forEach((el, i) => el.classList.toggle("active", i === state.maPickIndex));
+      items[state.maPickIndex]?.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const btn = items[state.maPickIndex] || items[0];
+      if (btn) applyMaterial(btn.dataset.ma);
+    } else if (e.key === "Escape") {
+      hideMaDropdown();
+    }
   }
 
   /* ---------- render ---------- */
@@ -160,7 +262,9 @@
     return rows
       .map((r, i) => ({ r, i }))
       .filter(({ r }) =>
-        [r.E, r.F, r.G, r.C, r.D, r.AU, r.AT, r.B].some((x) => String(x || "").toLowerCase().includes(q))
+        [r.E, r.F, r.G, r.C, r.D, r.AU, r.AT, r.B, r.Ngay_thuc_cap].some((x) =>
+          String(x || "").toLowerCase().includes(q)
+        )
       );
   }
 
@@ -168,7 +272,7 @@
     const list = filteredRows();
     const tbody = $("#gridBody");
     if (!list.length) {
-      tbody.innerHTML = `<tr><td colspan="14"><div class="empty"><b>Chưa có dữ liệu</b>Bấm 「＋ Thêm dòng」 hoặc 「Demo」</div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="16"><div class="empty"><b>Chưa có dữ liệu</b>Bấm 「＋ Thêm dòng」 hoặc 「Demo」</div></td></tr>`;
       return;
     }
     tbody.innerHTML = list
@@ -194,6 +298,8 @@
           <td class="num">${fmt(r.L)}</td>
           <td class="num"><strong>${fmt(r.M)}</strong></td>
           <td class="num">${fmt(r.AS)}</td>
+          <td class="num"><strong>${fmt(r.SL_thuc_cap)}</strong></td>
+          <td>${escapeHtml(r.Ngay_thuc_cap || "—")}</td>
           <td><span class="badge ${atBadge}">${escapeHtml(r.AT || "—")}</span></td>
           <td><span class="badge info">${escapeHtml(r.AU || "—")}</span></td>
         </tr>`;
@@ -205,16 +311,78 @@
     });
   }
 
-  function buildDaysGrid(days) {
-    const arr = Array.isArray(days) ? days : [];
+  function updateDaysHint() {
+    const qc = currentQC();
+    const el = $("#daysHint");
+    if (!el) return;
+    if (qc) {
+      el.innerHTML = `Nhập <b>số kiện nguyên</b> × QC đóng gói = <b>${fmt(qc)}</b>. VD nhập <b>2</b> → cấp <b>${fmt(2 * qc)}</b>. Không dùng nút ±.`;
+    } else {
+      el.innerHTML = `Chưa có <b>QC đóng gói</b> — nhập SL thô hoặc chọn mã VT để map QC.`;
+    }
+  }
+
+  /** Build day inputs as PACKAGE counts (no spinner) */
+  function buildDaysGrid(daysQty) {
+    const qc = currentQC();
+    const arr = Array.isArray(daysQty) ? daysQty : [];
     const grid = $("#daysGrid");
     grid.innerHTML = Array.from({ length: 31 }, (_, i) => {
-      const v = arr[i];
+      const qty = arr[i];
+      const packages =
+        qty == null || qty === ""
+          ? ""
+          : qc
+            ? TruNoLogic.qtyToPackages(qty, qc)
+            : qty;
+      const qtyShow = qty == null || qty === "" ? "" : fmt(qty);
       return `<label class="day-cell">
         <span>Ngày ${i + 1}</span>
-        <input type="number" step="any" data-day="${i}" value="${v == null || v === "" ? "" : fmt(v)}" />
+        <input type="text" inputmode="numeric" pattern="[0-9]*" class="no-spin" data-day="${i}" value="${packages === "" ? "" : packages}" placeholder="kiện" />
+        <small class="day-qty" data-day-qty="${i}">${qtyShow !== "" ? `= ${qtyShow}` : ""}</small>
       </label>`;
     }).join("");
+
+    grid.querySelectorAll("input[data-day]").forEach((inp) => {
+      inp.addEventListener("input", () => onDayPackageInput(inp));
+      inp.addEventListener("blur", () => onDayPackageInput(inp, true));
+    });
+  }
+
+  function onDayPackageInput(inp, snap) {
+    let raw = String(inp.value || "").trim().replace(/[^\d]/g, "");
+    if (snap && raw !== "") {
+      // force integer packages
+      raw = String(Math.max(0, Math.round(Number(raw) || 0)));
+      inp.value = raw === "0" ? "" : raw;
+    } else {
+      inp.value = raw;
+    }
+    const qc = currentQC();
+    const di = Number(inp.dataset.day);
+    const packages = raw === "" ? null : Number(raw);
+    const qty =
+      packages == null || !Number.isFinite(packages)
+        ? null
+        : TruNoLogic.packagesToQty(packages, qc);
+    const small = $(`#daysGrid small[data-day-qty="${di}"]`);
+    if (small) small.textContent = qty != null && qty > 0 ? `= ${fmt(qty)}` : "";
+  }
+
+  function readDaysAsQty() {
+    const qc = currentQC();
+    const days = Array(31).fill(null);
+    $$("#daysGrid input[data-day]").forEach((inp) => {
+      const i = Number(inp.dataset.day);
+      const raw = String(inp.value || "").trim();
+      if (raw === "") {
+        days[i] = null;
+        return;
+      }
+      const packages = Math.max(0, Math.round(Number(raw) || 0));
+      days[i] = packages > 0 ? TruNoLogic.packagesToQty(packages, qc) : null;
+    });
+    return days;
   }
 
   function showForm(show) {
@@ -241,11 +409,15 @@
     $("#f_L").value = fmt(row.L);
     $("#f_M").value = fmt(row.M);
     $("#f_AS").value = fmt(row.AS);
+    $("#f_SLTC").value = fmt(row.SL_thuc_cap);
+    $("#f_NgayTC").value = row.Ngay_thuc_cap || "";
     $("#f_AT").value = row.AT || "";
     $("#f_AU").value = row.AU || "";
+    updateDaysHint();
     buildDaysGrid(row.days);
     $("#daysPanel").classList.toggle("open", state.daysOpen);
     $("#btnToggleDays").textContent = state.daysOpen ? "Ẩn ngày" : "Hiện ngày";
+    hideMaDropdown();
   }
 
   function selectRow(id) {
@@ -257,12 +429,7 @@
   }
 
   function readForm() {
-    const days = Array(31).fill(null);
-    $$("#daysGrid input[data-day]").forEach((inp) => {
-      const i = Number(inp.dataset.day);
-      const raw = inp.value.trim();
-      days[i] = raw === "" ? null : Number(raw);
-    });
+    const days = readDaysAsQty();
     return TruNoLogic.newRow({
       id: $("#f_id").value || undefined,
       A: $("#f_A").value,
@@ -287,17 +454,33 @@
       setStatus("Cần nhập «Số phiếu Lefaso» và «MÃ VẬT TƯ».", "err");
       return;
     }
+    // auto map name if empty
+    if (!row.G) {
+      const m = materialCatalog().find((x) => x.ma === row.F);
+      if (m) {
+        row.G = m.ten || "";
+        if (row.I == null && m.qc != null) row.I = m.qc;
+      }
+    }
     const list = rowsOfSheet();
     const idx = list.findIndex((r) => r.id === row.id);
     if (idx >= 0) list[idx] = { ...list[idx], ...row };
     else list.push(row);
     state.store.sheets[state.sheet] = list;
     recomputeSheet();
-    state.selectedId = row.id || list[list.length - 1].id;
+    const savedId = row.id || list[list.length - 1].id;
+    state.selectedId = savedId;
+    // map ngay sang danh sach
     renderAll();
-    const saved = rowsOfSheet().find((r) => r.id === state.selectedId);
+    const saved = rowsOfSheet().find((r) => r.id === savedId);
     if (saved) fillForm(saved, "edit");
-    setStatus("Đã lưu dòng & tính K/L/M/AT/AU. Nhớ ☁ Lưu GitHub để chia sẻ.", "ok");
+    // scroll active row into view
+    const tr = $(`#gridBody tr[data-id="${savedId}"]`);
+    if (tr) tr.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    setStatus(
+      `Đã lưu & map danh sách · SL thực cấp ${fmt(saved?.SL_thuc_cap)} · ${saved?.Ngay_thuc_cap || "chưa cấp"}.`,
+      "ok"
+    );
   }
 
   function newForm() {
@@ -314,8 +497,10 @@
       "create"
     );
     $("#f_id").value = "";
+    $("#f_G").value = "";
     renderTable();
-    setStatus("Form thêm dòng mới.", "info");
+    setStatus("Form thêm dòng mới — tìm mã VT để map tên.", "info");
+    $("#f_F").focus();
   }
 
   function deleteRow() {
@@ -333,6 +518,11 @@
     setStatus("Đã xóa dòng (chưa lưu GitHub).", "info");
   }
 
+  function showForm(show) {
+    $("#detailEmpty").style.display = show ? "none" : "block";
+    $("#detailForm").style.display = show ? "block" : "none";
+  }
+
   function renderAll() {
     renderUsers();
     renderSheetNav();
@@ -341,7 +531,6 @@
     if (!state.selectedId && state.mode !== "create") showForm(false);
   }
 
-  /* ---------- remote ---------- */
   async function loadRemote() {
     setStatus("Đang tải GitHub…", "info");
     try {
@@ -387,7 +576,7 @@
     state.selectedId = null;
     showForm(false);
     renderAll();
-    setStatus("Demo đã nạp (OI2601482 → OI2602483 → OI2602489).", "ok");
+    setStatus("Demo đã nạp.", "ok");
   }
 
   function openGuide(focus) {
@@ -398,7 +587,6 @@
   function closeGuide() {
     $("#guideModal").classList.remove("open");
   }
-
   function openMobileSidebar() {
     $("#sidebar").classList.add("open");
     $("#sidebarBackdrop").classList.add("open");
@@ -413,21 +601,37 @@
       state.userId = e.target.value;
       localStorage.setItem("truno_user", state.userId);
       $("#sideUser").textContent = currentUser().name;
-      setStatus(`Đang làm việc: ${currentUser().name}`, "info");
     });
     $("#metaMonth").addEventListener("change", (e) => {
       state.month = Number(e.target.value) || 1;
       localStorage.setItem("truno_month", state.month);
       state.store.meta.month = state.month;
+      recomputeAll();
+      renderAll();
+      if (state.selectedId) {
+        const row = rowsOfSheet().find((r) => r.id === state.selectedId);
+        if (row) fillForm(row, "edit");
+      }
     });
     $("#metaYear").addEventListener("change", (e) => {
       state.year = Number(e.target.value) || 2026;
       localStorage.setItem("truno_year", state.year);
       state.store.meta.year = state.year;
+      recomputeAll();
+      renderAll();
     });
     $("#filterQ").addEventListener("input", (e) => {
       state.filter = e.target.value;
       renderTable();
+    });
+
+    $("#f_F").addEventListener("input", onMaInput);
+    $("#f_F").addEventListener("keydown", onMaKeydown);
+    $("#f_F").addEventListener("focus", onMaInput);
+    $("#f_F").addEventListener("blur", () => setTimeout(hideMaDropdown, 150));
+    $("#f_I").addEventListener("change", () => {
+      updateDaysHint();
+      if (state.daysOpen) buildDaysGrid(readDaysAsQty());
     });
 
     $("#btnAdd").addEventListener("click", newForm);
@@ -454,12 +658,19 @@
       storeApi.setToken($("#tokenInput").value.trim());
       closeGuide();
       renderKpis();
-      setStatus(storeApi.token ? "Đã lưu token trên trình duyệt này." : "Đã xóa token.", "ok");
+      setStatus(storeApi.token ? "Đã lưu token." : "Đã xóa token.", "ok");
     });
     $("#btnToggleDays").addEventListener("click", () => {
       state.daysOpen = !state.daysOpen;
       $("#daysPanel").classList.toggle("open", state.daysOpen);
       $("#btnToggleDays").textContent = state.daysOpen ? "Ẩn ngày" : "Hiện ngày";
+      if (state.daysOpen) {
+        // rebuild from current form days if any, else empty
+        const existing = state.selectedId
+          ? rowsOfSheet().find((r) => r.id === state.selectedId)?.days
+          : readDaysAsQty();
+        buildDaysGrid(existing || []);
+      }
     });
     $("#btnExport").addEventListener("click", () => {
       const blob = new Blob([JSON.stringify(state.store, null, 2)], { type: "application/json" });
