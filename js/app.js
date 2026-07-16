@@ -166,9 +166,8 @@
     if (m.dvt) $("#f_H").value = m.dvt;
     hideMaDropdown();
     updateDaysHint();
-    // refresh package displays if days open
     if (state.daysOpen) {
-      const days = readDaysAsQty();
+      const { days } = readDaysAsQty();
       buildDaysGrid(days);
     }
     setStatus(`Đã map: ${m.ma} → ${m.ten || ""} (QC ${fmt(m.qc)})`, "ok");
@@ -696,9 +695,10 @@
     $("#f_I").addEventListener("change", () => {
       updateDaysHint();
       if (state.daysOpen) {
-        // re-snap toàn bộ ngày theo QC mới
-        const days = readDaysAsQty();
+        const { days } = readDaysAsQty();
         buildDaysGrid(days);
+        // re-validate after QC change
+        $$("#daysGrid input[data-day]").forEach((inp) => validateDayInput(inp, true));
       }
     });
 
@@ -733,11 +733,13 @@
       $("#daysPanel").classList.toggle("open", state.daysOpen);
       $("#btnToggleDays").textContent = state.daysOpen ? "Ẩn ngày" : "Hiện ngày";
       if (state.daysOpen) {
-        // rebuild from current form days if any, else empty
-        const existing = state.selectedId
-          ? rowsOfSheet().find((r) => r.id === state.selectedId)?.days
-          : readDaysAsQty();
-        buildDaysGrid(existing || []);
+        let existing = [];
+        if (state.selectedId) {
+          existing = rowsOfSheet().find((r) => r.id === state.selectedId)?.days || [];
+        } else {
+          existing = readDaysAsQty().days || [];
+        }
+        buildDaysGrid(existing);
       }
     });
     $("#btnExport").addEventListener("click", () => {
