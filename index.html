@@ -30,6 +30,17 @@
       </div>
 
       <div class="sidebar-section">
+        <h3>Danh mục</h3>
+        <div class="nav-list">
+          <button type="button" class="nav-item" id="navMaterials" data-view="materials">
+            <span class="ico">📦</span>
+            <span>Mã vật tư</span>
+            <span class="meta" id="navMatCount">0</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-section" id="kpiSection">
         <h3>Tổng quan sheet</h3>
         <div class="kpi-grid">
           <div class="kpi"><span>Số dòng</span><b id="kpiRows">0</b></div>
@@ -102,10 +113,12 @@
           <button type="button" class="btn" id="btnRecalc">Σ Tính lại</button>
           <button type="button" class="btn btn-ghost" id="btnDemo">Demo</button>
           <div class="field" style="padding:0;gap:0;overflow:hidden">
-            <select id="exportSelect" title="Export" style="min-height:40px;border:none;background:transparent;padding:0 10px;max-width:150px">
+            <select id="exportSelect" title="Export" style="min-height:40px;border:none;background:transparent;padding:0 10px;max-width:190px">
               <option value="">⬇ Export…</option>
-              <option value="template">📄 File mẫu CSV</option>
-              <option value="csv">📊 Xuất dữ liệu CSV</option>
+              <option value="template">📄 Mẫu phiếu CSV</option>
+              <option value="csv">📊 Dữ liệu phiếu CSV</option>
+              <option value="mat_template">📦 Mẫu mã VT CSV</option>
+              <option value="mat_csv">📦 Danh mục mã VT CSV</option>
               <option value="json">💾 Sao lưu JSON</option>
             </select>
           </div>
@@ -121,7 +134,8 @@
         <span id="statusMsg" class="info">Sẵn sàng.</span>
       </div>
 
-      <div class="content-grid">
+      <!-- VIEW: PHIẾU / TRỪ NỢ -->
+      <div class="content-grid" id="viewVouchers">
         <!-- LIST -->
         <section class="card">
           <div class="card-head">
@@ -274,6 +288,83 @@
                 <button type="button" class="btn btn-ghost" id="btnNewRow">Làm mới form</button>
                 <button type="button" class="btn btn-danger" id="btnDelRow">Xóa dòng</button>
               </div>
+            </form>
+          </div>
+        </aside>
+      </div>
+
+      <!-- VIEW: DANH MỤC MÃ VẬT TƯ -->
+      <div class="content-grid" id="viewMaterials" hidden>
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Danh mục mã vật tư</h2>
+              <p class="sub">MÃ VẬT TƯ · TÊN VẬT TƯ · QC đóng gói · ĐVT — dùng để map khi nhập phiếu</p>
+            </div>
+            <span class="badge" id="matListCount">0 mã</span>
+          </div>
+          <div class="table-scroll">
+            <table class="data" id="matTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>MÃ VẬT TƯ</th>
+                  <th>TÊN VẬT TƯ</th>
+                  <th>QC đóng gói</th>
+                  <th>ĐVT</th>
+                </tr>
+              </thead>
+              <tbody id="matBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside class="card detail-panel">
+          <div class="card-head">
+            <div>
+              <h2 id="matDetailTitle">Thêm / sửa mã VT</h2>
+              <p class="sub">Import file mẫu Excel/CSV để nạp hàng loạt</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <form id="matForm" onsubmit="return false">
+              <input type="hidden" id="mat_edit_ma" />
+              <div class="form-grid">
+                <label class="form-field full">
+                  <span>MÃ VẬT TƯ *</span>
+                  <input type="text" id="mat_ma" placeholder="009200" autocomplete="off" />
+                </label>
+                <label class="form-field full">
+                  <span>TÊN VẬT TƯ *</span>
+                  <input type="text" id="mat_ten" placeholder="Tên vật tư" />
+                </label>
+                <label class="form-field accent-y">
+                  <span>QC đóng gói *</span>
+                  <input type="text" inputmode="decimal" class="no-spin" id="mat_qc" placeholder="35" />
+                </label>
+                <label class="form-field">
+                  <span>ĐVT</span>
+                  <input type="text" id="mat_dvt" value="KÍ" />
+                </label>
+              </div>
+              <div class="detail-actions">
+                <button type="button" class="btn btn-primary" id="btnMatSave">💾 Lưu mã VT</button>
+                <button type="button" class="btn btn-ghost" id="btnMatNew">Làm mới</button>
+                <button type="button" class="btn btn-danger" id="btnMatDel">Xóa</button>
+              </div>
+              <div class="section-title" style="margin-top:16px">File Excel / CSV</div>
+              <div class="detail-actions">
+                <button type="button" class="btn" id="btnMatTpl">📄 Export file mẫu mã VT</button>
+                <button type="button" class="btn" id="btnMatExp">📊 Export danh mục</button>
+                <label class="btn btn-primary" style="cursor:pointer">
+                  ⬆ Import mã VT
+                  <input type="file" id="fileMatImport" accept=".csv,.json,text/csv,application/json,.xlsx,.xls" hidden />
+                </label>
+              </div>
+              <p class="days-hint" style="margin-top:10px">
+                File mẫu cột: <b>MÃ VẬT TƯ</b>, <b>TÊN VẬT TƯ</b>, <b>QC đóng gói</b>, <b>ĐVT</b>.
+                Mở bằng Excel, điền xong Save as CSV (UTF-8) rồi Import.
+              </p>
             </form>
           </div>
         </aside>

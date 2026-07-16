@@ -398,12 +398,98 @@
     return { type: "sheets", sheets, count, skipped, mode: mode || "replace" };
   }
 
+  /** ===== Danh mục vật tư (Mã / Tên / QC / ĐVT) ===== */
+  const MAT_HEADERS = ["MÃ VẬT TƯ", "TÊN VẬT TƯ", "QC đóng gói", "ĐVT"];
+
+  function exportMaterialTemplate() {
+    const rows = [
+      {
+        "MÃ VẬT TƯ": "009200",
+        "TÊN VẬT TƯ": "CHẤT TRỢ PHÂN TÁN FS-302 ADIDAS",
+        "QC đóng gói": 25,
+        ĐVT: "KÍ",
+      },
+      {
+        "MÃ VẬT TƯ": "009185",
+        "TÊN VẬT TƯ": "Cao su [SBR-1502] ADIDAS",
+        "QC đóng gói": 35,
+        ĐVT: "KÍ",
+      },
+      {
+        "MÃ VẬT TƯ": "",
+        "TÊN VẬT TƯ": "(Xóa dòng mẫu — chỉ giữ header + data thật)",
+        "QC đóng gói": "",
+        ĐVT: "",
+      },
+    ];
+    const lines = [MAT_HEADERS.map(csvEscape).join(",")];
+    for (const r of rows) {
+      lines.push(MAT_HEADERS.map((h) => csvEscape(r[h])).join(","));
+    }
+    const name = `MAU_DANH_MUC_VAT_TU_${new Date().toISOString().slice(0, 10)}.csv`;
+    downloadText(name, "\uFEFF" + lines.join("\r\n"));
+    return name;
+  }
+
+  function exportMaterialsCsv(materials) {
+    const list = Array.isArray(materials) ? materials : [];
+    const lines = [MAT_HEADERS.map(csvEscape).join(",")];
+    for (const m of list) {
+      const o = {
+        "MÃ VẬT TƯ": m.ma || m.F || "",
+        "TÊN VẬT TƯ": m.ten || m.G || "",
+        "QC đóng gói": m.qc != null ? m.qc : m.I != null ? m.I : "",
+        ĐVT: m.dvt || m.H || "KÍ",
+      };
+      lines.push(MAT_HEADERS.map((h) => csvEscape(o[h])).join(","));
+    }
+    const name = `DANH_MUC_VAT_TU_${new Date().toISOString().slice(0, 10)}.csv`;
+    downloadText(name, "\uFEFF" + lines.join("\r\n"));
+    return { name, count: list.length };
+  }
+
+  function importMaterialsText(text, filename) {
+    const name = String(filename || "").toLowerCase();
+    let objects = [];
+
+    if (name.endsWith(".json") || text.trim().startsWith("[") || text.trim().startsWith("{")) {
+      const data = JSON.parse(text);
+      if (Array.isArray(data)) objects = data;
+      else if (Array.isArray(data.materials)) objects = data.materials;
+      else throw new Error("JSON danh mục không hợp lệ (cần mảng hoặc { materials: [] })");
+    } else {
+      objects = csvToObjects(text);
+    }
+
+    const map = new Map();
+    let skipped = 0;
+    for (const obj of objects) {
+      // support both header keys and raw {ma,ten,qc}
+      const ma = String(
+        obj["MÃ VẬT TƯ"] || obj.ma || obj.F || obj.Ma || obj["Ma vat tu"] || ""
+      ).trim();
+      if (!ma || ma.includes("Xóa") || ma.includes("xoa")) {
+        skipped++;
+        continue;
+      }
+      const ten = String(obj["TÊN VẬT TƯ"] || obj.ten || obj.G || obj.Ten || "").trim();
+      const qc = numOrNull(obj["QC đóng gói"] ?? obj.qc ?? obj.I ?? obj.QC);
+      const dvt = String(obj["ĐVT"] || obj.dvt || obj.H || "KÍ").trim() || "KÍ";
+      map.set(ma, { ma, ten, qc, dvt });
+    }
+    return { materials: Array.from(map.values()), count: map.size, skipped };
+  }
+
   global.TruNoIO = {
     ALL_HEADERS,
+    MAT_HEADERS,
     exportTemplate,
     exportDataCsv,
     exportDataJson,
     importText,
     rowToExport,
+    exportMaterialTemplate,
+    exportMaterialsCsv,
+    importMaterialsText,
   };
 })(typeof window !== "undefined" ? window : globalThis);

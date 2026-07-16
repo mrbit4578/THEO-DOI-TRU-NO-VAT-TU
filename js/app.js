@@ -7,9 +7,11 @@
   const state = {
     userId: localStorage.getItem("truno_user") || "u1",
     sheet: localStorage.getItem("truno_sheet") || "PHC",
+    view: localStorage.getItem("truno_view") || "vouchers", // vouchers | materials
     month: Number(localStorage.getItem("truno_month") || 7),
     year: Number(localStorage.getItem("truno_year") || 2026),
     selectedId: null,
+    selectedMat: null,
     filter: "",
     daysOpen: false,
     mode: "view",
@@ -19,7 +21,7 @@
 
   function emptyStore() {
     return {
-      version: 2,
+      version: 3,
       users: [
         { id: "u1", name: "User 1", role: "editor" },
         { id: "u2", name: "User 2", role: "editor" },
@@ -35,6 +37,7 @@
         updatedBy: "",
       },
       sheets: { PHC: [], "NM LAF": [], "NM LVF": [] },
+      materials: [], // { ma, ten, qc, dvt }
     };
   }
 
@@ -76,8 +79,46 @@
     return { month: state.month, year: state.year };
   }
 
+  /** Ưu tiên store.materials; bổ sung từ sheet nếu thiếu */
   function materialCatalog() {
-    return TruNoLogic.buildMaterialCatalog(state.store.sheets);
+    const map = new Map();
+    const fromSheets = TruNoLogic.buildMaterialCatalog(state.store.sheets);
+    for (const m of fromSheets) map.set(m.ma, { ...m });
+    const master = Array.isArray(state.store.materials) ? state.store.materials : [];
+    for (const m of master) {
+      const ma = String(m.ma || "").trim();
+      if (!ma) continue;
+      const prev = map.get(ma) || { ma, ten: "", qc: null, dvt: "KÍ" };
+      map.set(ma, {
+        ma,
+        ten: m.ten || prev.ten || "",
+        qc: m.qc != null ? m.qc : prev.qc,
+        dvt: m.dvt || prev.dvt || "KÍ",
+      });
+    }
+    return Array.from(map.values()).sort((a, b) => a.ma.localeCompare(b.ma));
+  }
+
+  function materialsList() {
+    if (!Array.isArray(state.store.materials)) state.store.materials = [];
+    return state.store.materials;
+  }
+
+  /** Đồng bộ master từ sheet (chỉ thêm mã chưa có) */
+  function seedMaterialsFromSheets() {
+    const master = materialsList();
+    const have = new Set(master.map((m) => m.ma));
+    const from = TruNoLogic.buildMaterialCatalog(state.store.sheets);
+    let added = 0;
+    for (const m of from) {
+      if (!have.has(m.ma)) {
+        master.push({ ma: m.ma, ten: m.ten || "", qc: m.qc, dvt: m.dvt || "KÍ" });
+        have.add(m.ma);
+        added++;
+      }
+    }
+    state.store.materials = master.sort((a, b) => a.ma.localeCompare(b.ma));
+    return added;
   }
 
   function normalizeStore(data) {
@@ -89,12 +130,22 @@
       users: data.users?.length ? data.users : base.users,
       meta: { ...base.meta, ...(data.meta || {}) },
       sheets: { PHC: [], "NM LAF": [], "NM LVF": [] },
+      materials: Array.isArray(data.materials) ? data.materials : [],
     };
     if (data.sheets) {
       for (const s of SHEETS) out.sheets[s] = Array.isArray(data.sheets[s]) ? data.sheets[s] : [];
     } else if (Array.isArray(data.rows)) {
       out.sheets.PHC = data.rows;
     }
+    // normalize material shape
+    out.materials = out.materials
+      .map((m) => ({
+        ma: String(m.ma || m.F || "").trim(),
+        ten: String(m.ten || m.G || "").trim(),
+        qc: m.qc != null ? m.qc : m.I != null ? m.I : null,
+        dvt: String(m.dvt || m.H || "KÍ").trim() || "KÍ",
+      }))
+      .filter((m) => m.ma);
     if (out.meta.month) state.month = out.meta.month;
     if (out.meta.year) state.year = out.meta.year;
     return out;
@@ -218,7 +269,7 @@
   function renderSheetNav() {
     $("#sheetNav").innerHTML = SHEETS.map((s) => {
       const n = (state.store.sheets[s] || []).length;
-      const active = s === state.sheet ? "active" : "";
+      const active = state.view === "vouchers" && s === state.sheet ? "active" : "";
       const ico = s === "PHC" ? "🏭" : s.includes("LAF") ? "🧱" : "🧪";
       return `<button type="button" class="nav-item ${active}" data-sheet="${s}">
         <span class="ico">${ico}</span>
@@ -231,10 +282,33 @@
         state.sheet = btn.dataset.sheet;
         localStorage.setItem("truno_sheet", state.sheet);
         state.selectedId = null;
+        switchView("vouchers");
         closeMobileSidebar();
-        renderAll();
       });
     });
+    const navMat = $("#navMaterials");
+    if (navMat) {
+      navMat.classList.toggle("active", state.view === "materials");
+      $("#navMatCount").textContent = materialsList().length;
+    }
+  }
+
+  function switchView(view) {
+    state.view = view === "materials" ? "materials" : "vouchers";
+    localStorage.setItem("truno_view", state.view);
+    const isMat = state.view === "materials";
+    $("#viewVouchers").hidden = isMat;
+    $("#viewMaterials").hidden = !isMat;
+    // toolbar: filter placeholder
+    const fq = $("#filterQ");
+    if (fq) {
+      fq.placeholder = isMat
+        ? "Tìm MÃ VẬT TƯ / TÊN VẬT TƯ…"
+        : "Số phiếu Lefaso, MÃ VẬT TƯ, TÊN VẬT TƯ…";
+    }
+    const btnAdd = $("#btnAdd");
+    if (btnAdd) btnAdd.textContent = isMat ? "＋ Thêm mã VT" : "＋ Thêm dòng";
+    renderAll();
   }
 
   function renderKpis() {
@@ -586,12 +660,127 @@
     $("#detailForm").style.display = show ? "block" : "none";
   }
 
+  /* ---------- materials screen ---------- */
+  function filteredMaterials() {
+    const q = state.filter.trim().toLowerCase();
+    let list = materialsList();
+    if (q) {
+      list = list.filter(
+        (m) =>
+          m.ma.toLowerCase().includes(q) ||
+          String(m.ten || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }
+
+  function renderMaterials() {
+    const list = filteredMaterials();
+    const tbody = $("#matBody");
+    if (!tbody) return;
+    $("#matListCount").textContent = `${materialsList().length} mã`;
+    $("#navMatCount").textContent = materialsList().length;
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty"><b>Chưa có danh mục mã VT</b>Thêm tay hoặc Import file mẫu</div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list
+      .map((m, i) => {
+        const active = state.selectedMat === m.ma ? "active" : "";
+        return `<tr class="${active}" data-ma="${escapeHtml(m.ma)}">
+          <td>${i + 1}</td>
+          <td><strong>${escapeHtml(m.ma)}</strong></td>
+          <td class="clip" title="${escapeHtml(m.ten || "")}">${escapeHtml(m.ten || "")}</td>
+          <td class="num">${fmt(m.qc)}</td>
+          <td>${escapeHtml(m.dvt || "KÍ")}</td>
+        </tr>`;
+      })
+      .join("");
+    tbody.querySelectorAll("tr[data-ma]").forEach((tr) => {
+      tr.addEventListener("click", () => selectMaterial(tr.dataset.ma));
+    });
+  }
+
+  function selectMaterial(ma) {
+    state.selectedMat = ma;
+    const m = materialsList().find((x) => x.ma === ma);
+    if (!m) return;
+    $("#mat_edit_ma").value = m.ma;
+    $("#mat_ma").value = m.ma;
+    $("#mat_ten").value = m.ten || "";
+    $("#mat_qc").value = m.qc != null ? fmt(m.qc) : "";
+    $("#mat_dvt").value = m.dvt || "KÍ";
+    $("#matDetailTitle").textContent = "Sửa mã VT";
+    renderMaterials();
+  }
+
+  function clearMatForm() {
+    state.selectedMat = null;
+    $("#mat_edit_ma").value = "";
+    $("#mat_ma").value = "";
+    $("#mat_ten").value = "";
+    $("#mat_qc").value = "";
+    $("#mat_dvt").value = "KÍ";
+    $("#matDetailTitle").textContent = "Thêm / sửa mã VT";
+    renderMaterials();
+  }
+
+  function saveMaterial() {
+    const ma = $("#mat_ma").value.trim();
+    const ten = $("#mat_ten").value.trim();
+    const qcRaw = $("#mat_qc").value.trim().replace(",", ".");
+    const dvt = $("#mat_dvt").value.trim() || "KÍ";
+    const qc = qcRaw === "" ? null : Number(qcRaw);
+    if (!ma) {
+      setStatus("Cần nhập MÃ VẬT TƯ.", "err");
+      return;
+    }
+    if (!ten) {
+      setStatus("Cần nhập TÊN VẬT TƯ.", "err");
+      return;
+    }
+    if (qc == null || !Number.isFinite(qc) || qc <= 0) {
+      setStatus("QC đóng gói phải là số > 0.", "err");
+      return;
+    }
+    const list = materialsList();
+    const oldMa = $("#mat_edit_ma").value.trim();
+    // rename: remove old key
+    let next = list.filter((m) => m.ma !== oldMa && m.ma !== ma);
+    next.push({ ma, ten, qc, dvt });
+    next.sort((a, b) => a.ma.localeCompare(b.ma));
+    state.store.materials = next;
+    state.selectedMat = ma;
+    renderMaterials();
+    selectMaterial(ma);
+    setStatus(`Đã lưu mã VT ${ma} · QC ${fmt(qc)}. Nhớ ☁ Lưu GitHub.`, "ok");
+  }
+
+  function deleteMaterial() {
+    const ma = $("#mat_edit_ma").value.trim() || $("#mat_ma").value.trim();
+    if (!ma) {
+      setStatus("Chưa chọn mã để xóa.", "err");
+      return;
+    }
+    if (!confirm(`Xóa mã vật tư ${ma}?`)) return;
+    state.store.materials = materialsList().filter((m) => m.ma !== ma);
+    clearMatForm();
+    setStatus(`Đã xóa ${ma} (chưa lưu GitHub).`, "info");
+  }
+
   function renderAll() {
     renderUsers();
     renderSheetNav();
     renderKpis();
-    renderTable();
-    if (!state.selectedId && state.mode !== "create") showForm(false);
+    if (state.view === "materials") {
+      renderMaterials();
+    } else {
+      renderTable();
+      if (!state.selectedId && state.mode !== "create") showForm(false);
+    }
+    // sync nav active
+    const navMat = $("#navMaterials");
+    if (navMat) navMat.classList.toggle("active", state.view === "materials");
   }
 
   async function loadRemote() {
@@ -600,12 +789,19 @@
       const data = await storeApi.load();
       state.store = normalizeStore(data);
       recomputeAll();
+      if (!materialsList().length) seedMaterialsFromSheets();
       state.selectedId = null;
       state.mode = "view";
       showForm(false);
       renderAll();
       const total = SHEETS.reduce((s, k) => s + (state.store.sheets[k]?.length || 0), 0);
-      setStatus(total ? `Đã tải ${total} dòng.` : "Chưa có dữ liệu online.", total ? "ok" : "info");
+      const mc = materialsList().length;
+      setStatus(
+        total || mc
+          ? `Đã tải ${total} dòng phiếu · ${mc} mã VT.`
+          : "Chưa có dữ liệu online.",
+        total || mc ? "ok" : "info"
+      );
     } catch (e) {
       setStatus(String(e.message || e), "err");
     }
@@ -685,7 +881,34 @@
     });
     $("#filterQ").addEventListener("input", (e) => {
       state.filter = e.target.value;
-      renderTable();
+      if (state.view === "materials") renderMaterials();
+      else renderTable();
+    });
+
+    $("#navMaterials").addEventListener("click", () => {
+      switchView("materials");
+      closeMobileSidebar();
+    });
+    $("#btnMatSave").addEventListener("click", saveMaterial);
+    $("#btnMatNew").addEventListener("click", clearMatForm);
+    $("#btnMatDel").addEventListener("click", deleteMaterial);
+    $("#btnMatTpl").addEventListener("click", () => {
+      const name = TruNoIO.exportMaterialTemplate();
+      setStatus(`Đã tải file mẫu danh mục: ${name}`, "ok");
+    });
+    $("#btnMatExp").addEventListener("click", () => {
+      const { name, count } = TruNoIO.exportMaterialsCsv(materialsList());
+      setStatus(`Đã export ${count} mã VT → ${name}`, "ok");
+    });
+    $("#fileMatImport").addEventListener("change", async (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      try {
+        await importMaterialsFile(f);
+      } catch (err) {
+        setStatus("Import mã VT lỗi: " + err.message, "err");
+      }
+      e.target.value = "";
     });
 
     $("#f_F").addEventListener("input", onMaInput);
@@ -702,7 +925,10 @@
       }
     });
 
-    $("#btnAdd").addEventListener("click", newForm);
+    $("#btnAdd").addEventListener("click", () => {
+      if (state.view === "materials") clearMatForm();
+      else newForm();
+    });
     $("#btnNewRow").addEventListener("click", newForm);
     $("#btnSaveRow").addEventListener("click", saveRow);
     $("#btnDelRow").addEventListener("click", deleteRow);
@@ -747,13 +973,25 @@
       e.target.value = "";
       if (!v) return;
       try {
+        if (state.view === "materials" || v === "mat_template" || v === "mat_csv") {
+          if (v === "template" || v === "mat_template") {
+            const name = TruNoIO.exportMaterialTemplate();
+            setStatus(`Đã tải file mẫu mã VT: ${name}`, "ok");
+            return;
+          }
+          if (v === "csv" || v === "mat_csv") {
+            const { name, count } = TruNoIO.exportMaterialsCsv(materialsList());
+            setStatus(`Đã export ${count} mã VT → ${name}`, "ok");
+            return;
+          }
+        }
         if (v === "template") {
           const name = TruNoIO.exportTemplate();
-          setStatus(`Đã tải file mẫu: ${name} — mở bằng Excel, điền rồi Import lại.`, "ok");
+          setStatus(`Đã tải file mẫu phiếu: ${name} — mở Excel, điền rồi Import.`, "ok");
         } else if (v === "csv") {
           recomputeAll();
           const { name, count } = TruNoIO.exportDataCsv(state.store);
-          setStatus(`Đã xuất ${count} dòng → ${name}`, "ok");
+          setStatus(`Đã xuất ${count} dòng phiếu → ${name}`, "ok");
         } else if (v === "json") {
           recomputeAll();
           const name = TruNoIO.exportDataJson(state.store);
@@ -764,13 +1002,68 @@
       }
     });
 
+    async function importMaterialsFile(f) {
+      if (/\.xlsx?$/i.test(f.name)) {
+        setStatus(
+          "File Excel: mở bằng Excel → Save As → CSV UTF-8 (Comma delimited) → Import lại.",
+          "err"
+        );
+        return;
+      }
+      const text = await f.text();
+      const mode = confirm(
+        "OK = Thay thế toàn bộ danh mục mã VT\nCancel = Gộp / cập nhật theo mã"
+      )
+        ? "replace"
+        : "merge";
+      const result = TruNoIO.importMaterialsText(text, f.name);
+      if (mode === "replace") {
+        state.store.materials = result.materials;
+      } else {
+        const map = new Map(materialsList().map((m) => [m.ma, m]));
+        for (const m of result.materials) map.set(m.ma, m);
+        state.store.materials = Array.from(map.values()).sort((a, b) =>
+          a.ma.localeCompare(b.ma)
+        );
+      }
+      clearMatForm();
+      switchView("materials");
+      setStatus(
+        `Import mã VT ${mode}: ${result.count} mã, bỏ ${result.skipped}. Nhớ ☁ Lưu GitHub.`,
+        "ok"
+      );
+    }
+
     $("#fileImport").addEventListener("change", async (e) => {
       const f = e.target.files?.[0];
       if (!f) return;
       try {
+        if (state.view === "materials") {
+          await importMaterialsFile(f);
+          e.target.value = "";
+          return;
+        }
+        if (/\.xlsx?$/i.test(f.name)) {
+          setStatus("Hỗ trợ CSV/JSON. Excel → Save As CSV UTF-8 rồi Import.", "err");
+          e.target.value = "";
+          return;
+        }
         const text = await f.text();
+        // detect material-only file (only mat headers)
+        const head = text.split(/\r?\n/)[0] || "";
+        if (
+          /MÃ VẬT TƯ/i.test(head) &&
+          /TÊN VẬT TƯ/i.test(head) &&
+          /QC/i.test(head) &&
+          !/Số phiếu Lefaso/i.test(head)
+        ) {
+          await importMaterialsFile(f);
+          e.target.value = "";
+          return;
+        }
+
         const mode = confirm(
-          "OK = Thay thế toàn bộ dữ liệu bằng file import\nCancel = Gộp thêm vào dữ liệu hiện tại"
+          "OK = Thay thế toàn bộ dữ liệu phiếu bằng file import\nCancel = Gộp thêm vào dữ liệu hiện tại"
         )
           ? "replace"
           : "merge";
@@ -791,6 +1084,7 @@
         }
 
         recomputeAll();
+        seedMaterialsFromSheets();
         state.selectedId = null;
         showForm(false);
         renderAll();
@@ -799,7 +1093,7 @@
           setStatus(`Đã import store JSON từ ${f.name}.`, "ok");
         } else {
           setStatus(
-            `Import ${mode === "replace" ? "thay thế" : "gộp"}: +${result.count} dòng, bỏ ${result.skipped}. File: ${f.name}`,
+            `Import phiếu ${mode}: +${result.count} dòng, bỏ ${result.skipped}. File: ${f.name}`,
             "ok"
           );
         }
@@ -820,7 +1114,9 @@
       recomputeSheet();
       setStatus("Demo mặc định (chưa có data remote).", "info");
     }
-    renderAll();
+    if (!materialsList().length) seedMaterialsFromSheets();
+    // restore view
+    switchView(state.view === "materials" ? "materials" : "vouchers");
   }
 
   document.addEventListener("DOMContentLoaded", init);
