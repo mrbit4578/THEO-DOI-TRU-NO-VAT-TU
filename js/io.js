@@ -102,6 +102,82 @@
     downloadBlob(filename, new Blob([text], { type: mime || "text/csv;charset=utf-8" }));
   }
 
+  function hasXlsx() {
+    return typeof global.XLSX !== "undefined" && global.XLSX.utils;
+  }
+
+  /** rows: array of objects with same keys; headers: column order */
+  function objectsToAoa(headers, rows) {
+    const aoa = [headers.slice()];
+    for (const r of rows) {
+      aoa.push(headers.map((h) => (r[h] === null || r[h] === undefined ? "" : r[h])));
+    }
+    return aoa;
+  }
+
+  /**
+   * Export Excel .xlsx (cần SheetJS XLSX trên window).
+   * sheetsSpec: [{ name: 'Sheet1', headers: [], rows: [{}] }] hoặc [{ name, aoa }]
+   */
+  function exportExcel(filename, sheetsSpec) {
+    if (!hasXlsx()) {
+      throw new Error(
+        "Thư viện Excel (SheetJS) chưa tải. Kiểm tra mạng hoặc F5 lại trang, rồi thử Export Excel."
+      );
+    }
+    const XLSX = global.XLSX;
+    const wb = XLSX.utils.book_new();
+    for (const spec of sheetsSpec) {
+      let aoa = spec.aoa;
+      if (!aoa && spec.headers && spec.rows) {
+        aoa = objectsToAoa(spec.headers, spec.rows);
+      }
+      if (!aoa || !aoa.length) aoa = [[""]];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      // độ rộng cột gợi ý
+      const colCount = aoa[0].length;
+      ws["!cols"] = Array.from({ length: colCount }, (_, i) => {
+        const h = String(aoa[0][i] || "");
+        return { wch: Math.min(36, Math.max(10, h.length + 2)) };
+      });
+      const sname = String(spec.name || "Sheet1").slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, sname);
+    }
+    const fname = filename.endsWith(".xlsx") ? filename : filename + ".xlsx";
+    XLSX.writeFile(wb, fname);
+    return fname;
+  }
+
+  /** Đọc file Excel ArrayBuffer → mảng object (sheet đầu) */
+  function readExcelToObjects(arrayBuffer) {
+    if (!hasXlsx()) {
+      throw new Error("Thư viện Excel chưa tải — F5 trang hoặc import CSV.");
+    }
+    const XLSX = global.XLSX;
+    const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    const sn = wb.SheetNames[0];
+    const ws = wb.Sheets[sn];
+    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false });
+    if (!aoa.length) return [];
+    const headers = aoa[0].map(normHeader);
+    const out = [];
+    for (let r = 1; r < aoa.length; r++) {
+      const line = aoa[r] || [];
+      if (!line.some((x) => String(x).trim() !== "")) continue;
+      const obj = {};
+      headers.forEach((h, c) => {
+        if (!h) return;
+        let v = line[c];
+        if (v instanceof Date) {
+          v = v.toISOString().slice(0, 10);
+        }
+        obj[h] = v;
+      });
+      out.push(obj);
+    }
+    return out;
+  }
+
   function rowToExport(sheetName, r) {
     const o = {
       Sheet: sheetName,
@@ -173,10 +249,38 @@
   }
 
   function exportTemplate() {
-    const csv = toCsv(buildTemplateRows());
-    const name = `MAU_NHAP_TRU_NO_VAT_TU_${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadText(name, csv);
-    return name;
+    // Excel mẫu màn hình nhập liệu
+    try {
+      const name = `MAU_NHAP_TRU_NO_VAT_TU_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      exportExcel(name, [
+        {
+          name: "NhapLieu",
+          headers: ALL_HEADERS,
+          rows: buildTemplateRows(),
+        },
+        {
+          name: "HuongDan",
+          aoa: [
+            ["HƯỚNG DẪN NHẬP LIỆU TRỪ NỢ VẬT TƯ"],
+            [""],
+            ["1. Sheet: PHC | NM LAF | NM LVF"],
+            ["2. Bắt buộc: Số phiếu Lefaso, MÃ VẬT TƯ"],
+            ["3. Cột 1–31: nhập số KÍ thực cấp (phải là bội số QC đóng gói)"],
+            ["4. VD QC=35 → nhập 70 (đúng), 80 (sai — hệ thống cảnh báo)"],
+            ["5. K/L/M/AT/AU hệ thống tự tính sau khi Import"],
+            ["6. Xóa dòng HUONG_DAN / ví dụ trước khi import data thật (hoặc để — hệ thống bỏ qua)"],
+            ["7. File → Save → Import trên web app"],
+          ],
+        },
+      ]);
+      return name;
+    } catch (e) {
+      // fallback CSV
+      const csv = toCsv(buildTemplateRows());
+      const name = `MAU_NHAP_TRU_NO_VAT_TU_${new Date().toISOString().slice(0, 10)}.csv`;
+      downloadText(name, csv);
+      return name + " (CSV fallback: " + e.message + ")";
+    }
   }
 
   function exportDataCsv(store) {
@@ -186,10 +290,17 @@
       if (!Array.isArray(arr)) continue;
       for (const r of arr) rows.push(rowToExport(sheetName, r));
     }
-    const csv = toCsv(rows);
-    const name = `DU_LIEU_TRU_NO_${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadText(name, csv);
-    return { name, count: rows.length };
+    const stamp = new Date().toISOString().slice(0, 10);
+    try {
+      const name = `DU_LIEU_TRU_NO_${stamp}.xlsx`;
+      exportExcel(name, [{ name: "DuLieu", headers: ALL_HEADERS, rows }]);
+      return { name, count: rows.length };
+    } catch (e) {
+      const csv = toCsv(rows);
+      const name = `DU_LIEU_TRU_NO_${stamp}.csv`;
+      downloadText(name, csv);
+      return { name, count: rows.length };
+    }
   }
 
   function exportDataJson(store) {
@@ -401,8 +512,8 @@
   /** ===== Danh mục vật tư (Mã / Tên / QC / ĐVT) ===== */
   const MAT_HEADERS = ["MÃ VẬT TƯ", "TÊN VẬT TƯ", "QC đóng gói", "ĐVT"];
 
-  function exportMaterialTemplate() {
-    const rows = [
+  function materialTemplateRows() {
+    return [
       {
         "MÃ VẬT TƯ": "009200",
         "TÊN VẬT TƯ": "CHẤT TRỢ PHÂN TÁN FS-302 ADIDAS",
@@ -416,36 +527,87 @@
         ĐVT: "KÍ",
       },
       {
-        "MÃ VẬT TƯ": "",
-        "TÊN VẬT TƯ": "(Xóa dòng mẫu — chỉ giữ header + data thật)",
-        "QC đóng gói": "",
-        ĐVT: "",
+        "MÃ VẬT TƯ": "009701",
+        "TÊN VẬT TƯ": "BÁT MÀU RB-0193A (ADIDAS)",
+        "QC đóng gói": 25,
+        ĐVT: "KÍ",
       },
     ];
-    const lines = [MAT_HEADERS.map(csvEscape).join(",")];
-    for (const r of rows) {
-      lines.push(MAT_HEADERS.map((h) => csvEscape(r[h])).join(","));
+  }
+
+  function exportMaterialTemplate() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    try {
+      const name = `MAU_DANH_MUC_VAT_TU_${stamp}.xlsx`;
+      exportExcel(name, [
+        {
+          name: "DanhMucVatTu",
+          headers: MAT_HEADERS,
+          rows: materialTemplateRows(),
+        },
+        {
+          name: "HuongDan",
+          aoa: [
+            ["HƯỚNG DẪN DANH MỤC MÃ VẬT TƯ"],
+            [""],
+            ["Cột bắt buộc: MÃ VẬT TƯ, TÊN VẬT TƯ, QC đóng gói"],
+            ["ĐVT mặc định: KÍ"],
+            ["QC dùng để kiểm tra cấp nguyên khi nhập số KÍ theo ngày"],
+            ["VD QC=35 → cấp 70 đúng, 80 sai"],
+            ["Điền xong → Import trên web (màn hình Mã vật tư)"],
+          ],
+        },
+      ]);
+      return name;
+    } catch (e) {
+      const rows = materialTemplateRows();
+      const lines = [MAT_HEADERS.map(csvEscape).join(",")];
+      for (const r of rows) lines.push(MAT_HEADERS.map((h) => csvEscape(r[h])).join(","));
+      const name = `MAU_DANH_MUC_VAT_TU_${stamp}.csv`;
+      downloadText(name, "\uFEFF" + lines.join("\r\n"));
+      return name + " (CSV fallback)";
     }
-    const name = `MAU_DANH_MUC_VAT_TU_${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadText(name, "\uFEFF" + lines.join("\r\n"));
-    return name;
   }
 
   function exportMaterialsCsv(materials) {
     const list = Array.isArray(materials) ? materials : [];
-    const lines = [MAT_HEADERS.map(csvEscape).join(",")];
-    for (const m of list) {
-      const o = {
-        "MÃ VẬT TƯ": m.ma || m.F || "",
-        "TÊN VẬT TƯ": m.ten || m.G || "",
-        "QC đóng gói": m.qc != null ? m.qc : m.I != null ? m.I : "",
-        ĐVT: m.dvt || m.H || "KÍ",
-      };
-      lines.push(MAT_HEADERS.map((h) => csvEscape(o[h])).join(","));
+    const rows = list.map((m) => ({
+      "MÃ VẬT TƯ": m.ma || m.F || "",
+      "TÊN VẬT TƯ": m.ten || m.G || "",
+      "QC đóng gói": m.qc != null ? m.qc : m.I != null ? m.I : "",
+      ĐVT: m.dvt || m.H || "KÍ",
+    }));
+    const stamp = new Date().toISOString().slice(0, 10);
+    try {
+      const name = `DANH_MUC_VAT_TU_${stamp}.xlsx`;
+      exportExcel(name, [{ name: "DanhMucVatTu", headers: MAT_HEADERS, rows }]);
+      return { name, count: list.length };
+    } catch (e) {
+      const lines = [MAT_HEADERS.map(csvEscape).join(",")];
+      for (const r of rows) lines.push(MAT_HEADERS.map((h) => csvEscape(r[h])).join(","));
+      const name = `DANH_MUC_VAT_TU_${stamp}.csv`;
+      downloadText(name, "\uFEFF" + lines.join("\r\n"));
+      return { name, count: list.length };
     }
-    const name = `DANH_MUC_VAT_TU_${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadText(name, "\uFEFF" + lines.join("\r\n"));
-    return { name, count: list.length };
+  }
+
+  function materialsFromObjects(objects) {
+    const map = new Map();
+    let skipped = 0;
+    for (const obj of objects) {
+      const ma = String(
+        obj["MÃ VẬT TƯ"] || obj.ma || obj.F || obj.Ma || obj["Ma vat tu"] || ""
+      ).trim();
+      if (!ma || /xóa|xoa|huong_dan|hướng dẫn/i.test(ma + String(obj["TÊN VẬT TƯ"] || ""))) {
+        skipped++;
+        continue;
+      }
+      const ten = String(obj["TÊN VẬT TƯ"] || obj.ten || obj.G || obj.Ten || "").trim();
+      const qc = numOrNull(obj["QC đóng gói"] ?? obj.qc ?? obj.I ?? obj.QC);
+      const dvt = String(obj["ĐVT"] || obj.dvt || obj.H || "KÍ").trim() || "KÍ";
+      map.set(ma, { ma, ten, qc, dvt });
+    }
+    return { materials: Array.from(map.values()), count: map.size, skipped };
   }
 
   function importMaterialsText(text, filename) {
@@ -460,24 +622,46 @@
     } else {
       objects = csvToObjects(text);
     }
+    return materialsFromObjects(objects);
+  }
 
-    const map = new Map();
-    let skipped = 0;
-    for (const obj of objects) {
-      // support both header keys and raw {ma,ten,qc}
-      const ma = String(
-        obj["MÃ VẬT TƯ"] || obj.ma || obj.F || obj.Ma || obj["Ma vat tu"] || ""
-      ).trim();
-      if (!ma || ma.includes("Xóa") || ma.includes("xoa")) {
-        skipped++;
-        continue;
-      }
-      const ten = String(obj["TÊN VẬT TƯ"] || obj.ten || obj.G || obj.Ten || "").trim();
-      const qc = numOrNull(obj["QC đóng gói"] ?? obj.qc ?? obj.I ?? obj.QC);
-      const dvt = String(obj["ĐVT"] || obj.dvt || obj.H || "KÍ").trim() || "KÍ";
-      map.set(ma, { ma, ten, qc, dvt });
+  async function importMaterialsFile(file) {
+    const name = String(file.name || "").toLowerCase();
+    if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+      const buf = await file.arrayBuffer();
+      const objects = readExcelToObjects(buf);
+      return materialsFromObjects(objects);
     }
-    return { materials: Array.from(map.values()), count: map.size, skipped };
+    const text = await file.text();
+    return importMaterialsText(text, file.name);
+  }
+
+  async function importDataFile(file, newRowFn, mode) {
+    const name = String(file.name || "").toLowerCase();
+    if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+      const buf = await file.arrayBuffer();
+      const objects = readExcelToObjects(buf);
+      // reuse objectToRow pipeline
+      const sheets = { PHC: [], "NM LAF": [], "NM LVF": [] };
+      let count = 0;
+      let skipped = 0;
+      for (const obj of objects) {
+        const parsed = objectToRow(obj, newRowFn);
+        if (!parsed) {
+          skipped++;
+          continue;
+        }
+        let sn = parsed.sheet;
+        if (sn === "LAF") sn = "NM LAF";
+        if (sn === "LVF") sn = "NM LVF";
+        if (!sheets[sn]) sn = "PHC";
+        sheets[sn].push(parsed.row);
+        count++;
+      }
+      return { type: "sheets", sheets, count, skipped, mode: mode || "replace" };
+    }
+    const text = await file.text();
+    return importText(text, file.name, newRowFn, mode);
   }
 
   global.TruNoIO = {
@@ -487,9 +671,13 @@
     exportDataCsv,
     exportDataJson,
     importText,
+    importDataFile,
     rowToExport,
     exportMaterialTemplate,
     exportMaterialsCsv,
     importMaterialsText,
+    importMaterialsFile,
+    exportExcel,
+    hasXlsx,
   };
 })(typeof window !== "undefined" ? window : globalThis);

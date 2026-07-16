@@ -113,18 +113,18 @@
           <button type="button" class="btn" id="btnRecalc">Σ Tính lại</button>
           <button type="button" class="btn btn-ghost" id="btnDemo">Demo</button>
           <div class="field" style="padding:0;gap:0;overflow:hidden">
-            <select id="exportSelect" title="Export" style="min-height:40px;border:none;background:transparent;padding:0 10px;max-width:190px">
-              <option value="">⬇ Export…</option>
-              <option value="template">📄 Mẫu phiếu CSV</option>
-              <option value="csv">📊 Dữ liệu phiếu CSV</option>
-              <option value="mat_template">📦 Mẫu mã VT CSV</option>
-              <option value="mat_csv">📦 Danh mục mã VT CSV</option>
+            <select id="exportSelect" title="Export Excel" style="min-height:40px;border:none;background:transparent;padding:0 10px;max-width:220px">
+              <option value="">⬇ Export Excel…</option>
+              <option value="template">📄 Mẫu nhập liệu (.xlsx)</option>
+              <option value="csv">📊 Dữ liệu phiếu (.xlsx)</option>
+              <option value="mat_template">📦 Mẫu mã vật tư (.xlsx)</option>
+              <option value="mat_csv">📦 Danh mục mã VT (.xlsx)</option>
               <option value="json">💾 Sao lưu JSON</option>
             </select>
           </div>
-          <label class="btn btn-primary" style="cursor:pointer" title="Import CSV mẫu hoặc JSON">
+          <label class="btn btn-primary" style="cursor:pointer" title="Import Excel .xlsx / CSV / JSON">
             ⬆ Import
-            <input type="file" id="fileImport" accept=".csv,.json,text/csv,application/json" hidden />
+            <input type="file" id="fileImport" accept=".csv,.json,.xlsx,.xls,text/csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
           </label>
           <button type="button" class="btn btn-warn" id="btnToken" style="background:var(--warn-soft);border-color:rgba(245,158,11,.35);color:#fcd34d">🔑 Token</button>
         </div>
@@ -354,16 +354,16 @@
               </div>
               <div class="section-title" style="margin-top:16px">File Excel / CSV</div>
               <div class="detail-actions">
-                <button type="button" class="btn" id="btnMatTpl">📄 Export file mẫu mã VT</button>
-                <button type="button" class="btn" id="btnMatExp">📊 Export danh mục</button>
-                <label class="btn btn-primary" style="cursor:pointer">
-                  ⬆ Import mã VT
-                  <input type="file" id="fileMatImport" accept=".csv,.json,text/csv,application/json,.xlsx,.xls" hidden />
+                <button type="button" class="btn btn-primary" id="btnMatTpl">📄 Export Excel mẫu mã VT</button>
+                <button type="button" class="btn" id="btnMatExp">📊 Export Excel danh mục</button>
+                <label class="btn btn-success" style="cursor:pointer">
+                  ⬆ Import Excel/CSV mã VT
+                  <input type="file" id="fileMatImport" accept=".csv,.json,.xlsx,.xls,text/csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
                 </label>
               </div>
               <p class="days-hint" style="margin-top:10px">
-                File mẫu cột: <b>MÃ VẬT TƯ</b>, <b>TÊN VẬT TƯ</b>, <b>QC đóng gói</b>, <b>ĐVT</b>.
-                Mở bằng Excel, điền xong Save as CSV (UTF-8) rồi Import.
+                Bấm <b>Export Excel mẫu mã VT</b> → mở file <code>.xlsx</code> bằng Excel → điền
+                <b>MÃ VẬT TƯ</b>, <b>TÊN VẬT TƯ</b>, <b>QC đóng gói</b>, <b>ĐVT</b> → Import lại.
               </p>
             </form>
           </div>
@@ -407,7 +407,14 @@
     </div>
   </div>
 
-  <script src="js/logic.js"></script>
+    <!-- SheetJS: Excel .xlsx export/import -->
+  <script src="js/vendor/xlsx.full.min.js"></script>
+  <script>
+    if (typeof XLSX === "undefined") {
+      document.write('<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"><\/script>');
+    }
+  </script>
+<script src="js/logic.js"></script>
   <script src="js/github-store.js"></script>
   <script src="js/io.js"></script>
   <script src="js/app.js"></script>

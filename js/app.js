@@ -893,12 +893,24 @@
     $("#btnMatNew").addEventListener("click", clearMatForm);
     $("#btnMatDel").addEventListener("click", deleteMaterial);
     $("#btnMatTpl").addEventListener("click", () => {
-      const name = TruNoIO.exportMaterialTemplate();
-      setStatus(`Đã tải file mẫu danh mục: ${name}`, "ok");
+      try {
+        if (!TruNoIO.hasXlsx()) {
+          setStatus("Đang chờ thư viện Excel… F5 trang (cần internet lần đầu) rồi thử lại.", "err");
+          return;
+        }
+        const name = TruNoIO.exportMaterialTemplate();
+        setStatus(`Đã tải Excel mẫu mã VT: ${name}`, "ok");
+      } catch (err) {
+        setStatus("Export Excel lỗi: " + err.message, "err");
+      }
     });
     $("#btnMatExp").addEventListener("click", () => {
-      const { name, count } = TruNoIO.exportMaterialsCsv(materialsList());
-      setStatus(`Đã export ${count} mã VT → ${name}`, "ok");
+      try {
+        const { name, count } = TruNoIO.exportMaterialsCsv(materialsList());
+        setStatus(`Đã export Excel ${count} mã VT → ${name}`, "ok");
+      } catch (err) {
+        setStatus("Export lỗi: " + err.message, "err");
+      }
     });
     $("#fileMatImport").addEventListener("change", async (e) => {
       const f = e.target.files?.[0];
@@ -973,25 +985,30 @@
       e.target.value = "";
       if (!v) return;
       try {
-        if (state.view === "materials" || v === "mat_template" || v === "mat_csv") {
-          if (v === "template" || v === "mat_template") {
-            const name = TruNoIO.exportMaterialTemplate();
-            setStatus(`Đã tải file mẫu mã VT: ${name}`, "ok");
-            return;
-          }
-          if (v === "csv" || v === "mat_csv") {
-            const { name, count } = TruNoIO.exportMaterialsCsv(materialsList());
-            setStatus(`Đã export ${count} mã VT → ${name}`, "ok");
-            return;
-          }
+        if (!TruNoIO.hasXlsx() && v !== "json") {
+          setStatus(
+            "Thư viện Excel chưa sẵn sàng. F5 lại trang (cần internet tải SheetJS), rồi Export Excel.",
+            "err"
+          );
+          return;
+        }
+        if (v === "mat_template" || (state.view === "materials" && v === "template")) {
+          const name = TruNoIO.exportMaterialTemplate();
+          setStatus(`Đã tải Excel mẫu mã VT: ${name}`, "ok");
+          return;
+        }
+        if (v === "mat_csv" || (state.view === "materials" && v === "csv")) {
+          const { name, count } = TruNoIO.exportMaterialsCsv(materialsList());
+          setStatus(`Đã export Excel ${count} mã VT → ${name}`, "ok");
+          return;
         }
         if (v === "template") {
           const name = TruNoIO.exportTemplate();
-          setStatus(`Đã tải file mẫu phiếu: ${name} — mở Excel, điền rồi Import.`, "ok");
+          setStatus(`Đã tải Excel mẫu nhập liệu: ${name}`, "ok");
         } else if (v === "csv") {
           recomputeAll();
           const { name, count } = TruNoIO.exportDataCsv(state.store);
-          setStatus(`Đã xuất ${count} dòng phiếu → ${name}`, "ok");
+          setStatus(`Đã xuất Excel ${count} dòng phiếu → ${name}`, "ok");
         } else if (v === "json") {
           recomputeAll();
           const name = TruNoIO.exportDataJson(state.store);
@@ -1003,20 +1020,12 @@
     });
 
     async function importMaterialsFile(f) {
-      if (/\.xlsx?$/i.test(f.name)) {
-        setStatus(
-          "File Excel: mở bằng Excel → Save As → CSV UTF-8 (Comma delimited) → Import lại.",
-          "err"
-        );
-        return;
-      }
-      const text = await f.text();
       const mode = confirm(
         "OK = Thay thế toàn bộ danh mục mã VT\nCancel = Gộp / cập nhật theo mã"
       )
         ? "replace"
         : "merge";
-      const result = TruNoIO.importMaterialsText(text, f.name);
+      const result = await TruNoIO.importMaterialsFile(f);
       if (mode === "replace") {
         state.store.materials = result.materials;
       } else {
@@ -1043,23 +1052,28 @@
           e.target.value = "";
           return;
         }
-        if (/\.xlsx?$/i.test(f.name)) {
-          setStatus("Hỗ trợ CSV/JSON. Excel → Save As CSV UTF-8 rồi Import.", "err");
-          e.target.value = "";
-          return;
-        }
-        const text = await f.text();
-        // detect material-only file (only mat headers)
-        const head = text.split(/\r?\n/)[0] || "";
-        if (
-          /MÃ VẬT TƯ/i.test(head) &&
-          /TÊN VẬT TƯ/i.test(head) &&
-          /QC/i.test(head) &&
-          !/Số phiếu Lefaso/i.test(head)
-        ) {
+
+        let text = "";
+        const isExcel = /\.xlsx?$/i.test(f.name);
+        // nhận diện file danh mục mã VT
+        if (isExcel && /vat.?tu|danh.?muc|material|MAU_DANH_MUC/i.test(f.name)) {
           await importMaterialsFile(f);
           e.target.value = "";
           return;
+        }
+        if (!isExcel) {
+          text = await f.text();
+          const head = text.split(/\r?\n/)[0] || "";
+          if (
+            /MÃ VẬT TƯ/i.test(head) &&
+            /TÊN VẬT TƯ/i.test(head) &&
+            /QC/i.test(head) &&
+            !/Số phiếu Lefaso/i.test(head)
+          ) {
+            await importMaterialsFile(f);
+            e.target.value = "";
+            return;
+          }
         }
 
         const mode = confirm(
@@ -1068,7 +1082,9 @@
           ? "replace"
           : "merge";
 
-        const result = TruNoIO.importText(text, f.name, TruNoLogic.newRow, mode);
+        const result = isExcel
+          ? await TruNoIO.importDataFile(f, TruNoLogic.newRow, mode)
+          : TruNoIO.importText(text, f.name, TruNoLogic.newRow, mode);
 
         if (result.type === "store") {
           state.store = normalizeStore(result.store);
