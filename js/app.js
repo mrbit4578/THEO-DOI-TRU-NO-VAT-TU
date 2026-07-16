@@ -1,4 +1,4 @@
-/* global TruNoLogic, GitHubStore */
+/* global TruNoLogic, GitHubStore, TruNoIO */
 (function () {
   const SHEETS = ["PHC", "NM LAF", "NM LVF"];
   const storeApi = new GitHubStore();
@@ -742,23 +742,67 @@
         buildDaysGrid(existing);
       }
     });
-    $("#btnExport").addEventListener("click", () => {
-      const blob = new Blob([JSON.stringify(state.store, null, 2)], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `truno-${Date.now()}.json`;
-      a.click();
+    $("#exportSelect").addEventListener("change", (e) => {
+      const v = e.target.value;
+      e.target.value = "";
+      if (!v) return;
+      try {
+        if (v === "template") {
+          const name = TruNoIO.exportTemplate();
+          setStatus(`Đã tải file mẫu: ${name} — mở bằng Excel, điền rồi Import lại.`, "ok");
+        } else if (v === "csv") {
+          recomputeAll();
+          const { name, count } = TruNoIO.exportDataCsv(state.store);
+          setStatus(`Đã xuất ${count} dòng → ${name}`, "ok");
+        } else if (v === "json") {
+          recomputeAll();
+          const name = TruNoIO.exportDataJson(state.store);
+          setStatus(`Đã sao lưu JSON → ${name}`, "ok");
+        }
+      } catch (err) {
+        setStatus("Export lỗi: " + err.message, "err");
+      }
     });
+
     $("#fileImport").addEventListener("change", async (e) => {
       const f = e.target.files?.[0];
       if (!f) return;
       try {
-        state.store = normalizeStore(JSON.parse(await f.text()));
+        const text = await f.text();
+        const mode = confirm(
+          "OK = Thay thế toàn bộ dữ liệu bằng file import\nCancel = Gộp thêm vào dữ liệu hiện tại"
+        )
+          ? "replace"
+          : "merge";
+
+        const result = TruNoIO.importText(text, f.name, TruNoLogic.newRow, mode);
+
+        if (result.type === "store") {
+          state.store = normalizeStore(result.store);
+        } else {
+          if (mode === "replace") {
+            state.store.sheets = { PHC: [], "NM LAF": [], "NM LVF": [] };
+          }
+          for (const sn of SHEETS) {
+            const incoming = result.sheets[sn] || [];
+            if (mode === "replace") state.store.sheets[sn] = incoming;
+            else state.store.sheets[sn] = [...(state.store.sheets[sn] || []), ...incoming];
+          }
+        }
+
         recomputeAll();
         state.selectedId = null;
         showForm(false);
         renderAll();
-        setStatus("Đã import JSON.", "ok");
+
+        if (result.type === "store") {
+          setStatus(`Đã import store JSON từ ${f.name}.`, "ok");
+        } else {
+          setStatus(
+            `Import ${mode === "replace" ? "thay thế" : "gộp"}: +${result.count} dòng, bỏ ${result.skipped}. File: ${f.name}`,
+            "ok"
+          );
+        }
       } catch (err) {
         setStatus("Import lỗi: " + err.message, "err");
       }
