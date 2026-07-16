@@ -316,57 +316,95 @@
     const el = $("#daysHint");
     if (!el) return;
     if (qc) {
-      el.innerHTML = `Nhập <b>số kiện nguyên</b> × QC đóng gói = <b>${fmt(qc)}</b>. VD nhập <b>2</b> → cấp <b>${fmt(2 * qc)}</b>. Không dùng nút ±.`;
+      el.innerHTML = `Nhập <b>số KÍ thực cấp</b>. QC = <b>${fmt(qc)}</b> → chỉ nhận bội số (…, ${fmt(qc)}, ${fmt(qc * 2)}, ${fmt(qc * 3)}, …). Số lẻ hệ thống <b>tự làm tròn ngầm</b>.`;
     } else {
-      el.innerHTML = `Chưa có <b>QC đóng gói</b> — nhập SL thô hoặc chọn mã VT để map QC.`;
+      el.innerHTML = `Chưa có <b>QC đóng gói</b> — chọn mã VT để map QC, rồi nhập KÍ thực cấp (bội số QC).`;
     }
   }
 
-  /** Build day inputs as PACKAGE counts (no spinner) */
+  /** Build day inputs: nhập thẳng KÍ, không spinner; blur → snap bội QC */
   function buildDaysGrid(daysQty) {
-    const qc = currentQC();
     const arr = Array.isArray(daysQty) ? daysQty : [];
     const grid = $("#daysGrid");
     grid.innerHTML = Array.from({ length: 31 }, (_, i) => {
       const qty = arr[i];
-      const packages =
-        qty == null || qty === ""
-          ? ""
-          : qc
-            ? TruNoLogic.qtyToPackages(qty, qc)
-            : qty;
-      const qtyShow = qty == null || qty === "" ? "" : fmt(qty);
+      const show = qty == null || qty === "" ? "" : fmt(qty);
       return `<label class="day-cell">
         <span>Ngày ${i + 1}</span>
-        <input type="text" inputmode="numeric" pattern="[0-9]*" class="no-spin" data-day="${i}" value="${packages === "" ? "" : packages}" placeholder="kiện" />
-        <small class="day-qty" data-day-qty="${i}">${qtyShow !== "" ? `= ${qtyShow}` : ""}</small>
+        <input type="text" inputmode="decimal" class="no-spin" data-day="${i}" value="${show}" placeholder="KÍ" />
+        <small class="day-qty" data-day-qty="${i}"></small>
       </label>`;
     }).join("");
 
     grid.querySelectorAll("input[data-day]").forEach((inp) => {
-      inp.addEventListener("input", () => onDayPackageInput(inp));
-      inp.addEventListener("blur", () => onDayPackageInput(inp, true));
+      inp.addEventListener("input", () => onDayQtyInput(inp, false));
+      inp.addEventListener("blur", () => onDayQtyInput(inp, true));
+      inp.addEventListener("change", () => onDayQtyInput(inp, true));
     });
   }
 
-  function onDayPackageInput(inp, snap) {
-    let raw = String(inp.value || "").trim().replace(/[^\d]/g, "");
-    if (snap && raw !== "") {
-      // force integer packages
-      raw = String(Math.max(0, Math.round(Number(raw) || 0)));
-      inp.value = raw === "0" ? "" : raw;
-    } else {
-      inp.value = raw;
-    }
-    const qc = currentQC();
+  function onDayQtyInput(inp, doSnap) {
+    // cho phép số thập phân khi gõ; khi blur mới ràng buộc bội QC
+    let raw = String(inp.value || "").trim().replace(",", ".");
+    raw = raw.replace(/[^\d.]/g, "");
+    // chỉ 1 dấu chấm
+    const parts = raw.split(".");
+    if (parts.length > 2) raw = parts[0] + "." + parts.slice(1).join("");
+    inp.value = raw;
+
     const di = Number(inp.dataset.day);
-    const packages = raw === "" ? null : Number(raw);
-    const qty =
-      packages == null || !Number.isFinite(packages)
-        ? null
-        : TruNoLogic.packagesToQty(packages, qc);
     const small = $(`#daysGrid small[data-day-qty="${di}"]`);
-    if (small) small.textContent = qty != null && qty > 0 ? `= ${fmt(qty)}` : "";
+    const qc = currentQC();
+
+    if (raw === "" || raw === ".") {
+      if (small) small.textContent = "";
+      inp.classList.remove("day-snap");
+      return;
+    }
+
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+      if (small) small.textContent = "";
+      return;
+    }
+
+    if (!doSnap) {
+      // gõ dở: chỉ cảnh báo nếu đã lệch QC
+      if (qc && !TruNoLogic.isMultipleOfQC(n, qc)) {
+        if (small) small.textContent = `≠ bội ${fmt(qc)}`;
+        inp.classList.add("day-snap");
+      } else {
+        if (small) {
+          const pk = qc ? TruNoLogic.qtyToPackages(n, qc) : null;
+          small.textContent = pk != null ? `${pk} kiện` : "";
+        }
+        inp.classList.remove("day-snap");
+      }
+      return;
+    }
+
+    // blur/change: tự snap ngầm
+    const res = TruNoLogic.snapQtyToQC(n, qc);
+    if (res.value == null || res.value === 0) {
+      inp.value = "";
+      if (small) small.textContent = "";
+      inp.classList.remove("day-snap");
+      return;
+    }
+    inp.value = fmt(res.value);
+    if (small) {
+      small.textContent = res.packages != null ? `${res.packages} kiện × QC` : "";
+    }
+    if (res.snapped) {
+      inp.classList.add("day-snap");
+      setStatus(
+        `Ngày ${di + 1}: ${fmt(n)} lẻ so với QC ${fmt(qc)} → tự chỉnh ${fmt(res.value)} (cấp nguyên).`,
+        "info"
+      );
+      setTimeout(() => inp.classList.remove("day-snap"), 1200);
+    } else {
+      inp.classList.remove("day-snap");
+    }
   }
 
   function readDaysAsQty() {
@@ -374,13 +412,16 @@
     const days = Array(31).fill(null);
     $$("#daysGrid input[data-day]").forEach((inp) => {
       const i = Number(inp.dataset.day);
+      // luôn snap trước khi đọc
+      onDayQtyInput(inp, true);
       const raw = String(inp.value || "").trim();
       if (raw === "") {
         days[i] = null;
         return;
       }
-      const packages = Math.max(0, Math.round(Number(raw) || 0));
-      days[i] = packages > 0 ? TruNoLogic.packagesToQty(packages, qc) : null;
+      const res = TruNoLogic.snapQtyToQC(Number(raw), qc);
+      days[i] = res.value != null && res.value > 0 ? res.value : null;
+      if (res.value != null && res.value > 0) inp.value = fmt(res.value);
     });
     return days;
   }
@@ -631,7 +672,11 @@
     $("#f_F").addEventListener("blur", () => setTimeout(hideMaDropdown, 150));
     $("#f_I").addEventListener("change", () => {
       updateDaysHint();
-      if (state.daysOpen) buildDaysGrid(readDaysAsQty());
+      if (state.daysOpen) {
+        // re-snap toàn bộ ngày theo QC mới
+        const days = readDaysAsQty();
+        buildDaysGrid(days);
+      }
     });
 
     $("#btnAdd").addEventListener("click", newForm);

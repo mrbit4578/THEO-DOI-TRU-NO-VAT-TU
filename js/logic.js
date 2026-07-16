@@ -99,7 +99,7 @@
   function packagesToQty(packages, qc) {
     const p = Math.max(0, Math.round(num(packages) || 0));
     const q = num(qc);
-    if (!q || q <= 0) return p; // không có QC thì coi input là SL thô
+    if (!q || q <= 0) return p;
     return p * q;
   }
 
@@ -108,6 +108,36 @@
     const v = num(qty) || 0;
     if (!q || q <= 0) return v;
     return Math.round(v / q);
+  }
+
+  /**
+   * Ràng buộc SL thực cấp (KÍ) phải là bội số của QC đóng gói.
+   * VD QC=35: 70 OK, 80 → tự làm tròn về 70 (gần nhất, không âm).
+   * Trả về { value, snapped, packages }
+   */
+  function snapQtyToQC(qty, qc) {
+    const q = num(qc);
+    let v = num(qty);
+    if (v === null || v === undefined || v === "") {
+      return { value: null, snapped: false, packages: null };
+    }
+    if (v < 0) v = 0;
+    if (!q || q <= 0) {
+      return { value: v, snapped: false, packages: null };
+    }
+    const packages = Math.max(0, Math.round(v / q));
+    const snappedVal = packages * q;
+    const snapped = Math.abs(snappedVal - v) > 1e-9;
+    return { value: snappedVal, snapped, packages };
+  }
+
+  function isMultipleOfQC(qty, qc) {
+    const q = num(qc);
+    const v = num(qty);
+    if (v === null || v === 0) return true;
+    if (!q || q <= 0) return true;
+    const r = v / q;
+    return Math.abs(r - Math.round(r)) < 1e-9;
   }
 
   function voucherOrder(rows) {
@@ -346,6 +376,8 @@
     searchMaterials,
     packagesToQty,
     qtyToPackages,
+    snapQtyToQC,
+    isMultipleOfQC,
     autoFill,
     newRow,
     sampleData,
