@@ -1,17 +1,189 @@
 {
   "version": 1,
   "users": [
-    { "id": "u1", "name": "User 1", "role": "editor" },
-    { "id": "u2", "name": "User 2", "role": "editor" },
-    { "id": "u3", "name": "User 3", "role": "editor" },
-    { "id": "u4", "name": "User 4", "role": "editor" },
-    { "id": "u5", "name": "User 5", "role": "editor" }
+    {
+      "id": "u1",
+      "name": "User 1",
+      "role": "editor"
+    },
+    {
+      "id": "u2",
+      "name": "User 2",
+      "role": "editor"
+    },
+    {
+      "id": "u3",
+      "name": "User 3",
+      "role": "editor"
+    },
+    {
+      "id": "u4",
+      "name": "User 4",
+      "role": "editor"
+    },
+    {
+      "id": "u5",
+      "name": "User 5",
+      "role": "editor"
+    }
   ],
   "meta": {
-    "title": "Theo dõi trừ nợ vật tư",
+    "title": "Theo doi tru no vat tu",
     "plant": "PHC",
-    "updatedAt": "",
-    "updatedBy": ""
+    "updatedAt": "2026-07-16T07:43:35.139Z",
+    "updatedBy": "seed"
   },
-  "rows": []
+  "rows": [
+    {
+      "id": "rmrn7cwyoyhkfah",
+      "A": "2026-07-16",
+      "B": "",
+      "C": "",
+      "D": "PHC",
+      "E": "OI2601482",
+      "F": "009701",
+      "G": "BÁT MÀU RB-0193A (ADIDAS)",
+      "H": "KÍ",
+      "I": 25,
+      "J": 0.04,
+      "K": null,
+      "L": null,
+      "M": 0.04,
+      "days": [],
+      "AS": -0.04,
+      "AT": "",
+      "AU": "",
+      "note": "",
+      "updatedBy": "",
+      "updatedAt": "",
+      "_auto": false
+    },
+    {
+      "id": "rmrn7cwypsoyh64",
+      "A": "2026-07-16",
+      "B": "",
+      "C": "",
+      "D": "PHC",
+      "E": "OI2601482",
+      "F": "009185",
+      "G": "Cao su [SBR-1502] ADIDAS",
+      "H": "KÍ",
+      "I": 35,
+      "J": 1167,
+      "K": null,
+      "L": null,
+      "M": 1167,
+      "days": [
+        1190
+      ],
+      "AS": 23,
+      "AT": "",
+      "AU": "",
+      "note": "",
+      "updatedBy": "",
+      "updatedAt": "",
+      "_auto": false
+    },
+    {
+      "id": "rmrn7cwyp41ul0s",
+      "A": "2026-07-16",
+      "B": "",
+      "C": "",
+      "D": "PHC",
+      "E": "OI2601482",
+      "F": "009200",
+      "G": "CHẤT TRỢ PHÂN TÁN FS-302 ADIDAS",
+      "H": "KÍ",
+      "I": 25,
+      "J": 6.6,
+      "K": null,
+      "L": null,
+      "M": 6.6,
+      "days": [
+        25
+      ],
+      "AS": 18.4,
+      "AT": "",
+      "AU": "",
+      "note": "",
+      "updatedBy": "",
+      "updatedAt": "",
+      "_auto": false
+    },
+    {
+      "id": "rmrn7cwypg802kv",
+      "A": "2026-07-16",
+      "B": "",
+      "C": "",
+      "D": "PHC",
+      "E": "OI2602483",
+      "F": "009701",
+      "G": "BÁT MÀU RB-0193A (ADIDAS)",
+      "H": "KÍ",
+      "I": 25,
+      "J": 0.09,
+      "K": null,
+      "L": 0.04,
+      "M": 0.13,
+      "days": [],
+      "AS": -0.09,
+      "AT": "SL nhỏ hơn QC cấp nguyên",
+      "AU": "OI2601482",
+      "note": "",
+      "updatedBy": "",
+      "updatedAt": "",
+      "_srcIndex": 0,
+      "_auto": true
+    },
+    {
+      "id": "rmrn7cwyptjdqbm",
+      "A": "2026-07-16",
+      "B": "",
+      "C": "",
+      "D": "PHC",
+      "E": "OI2602483",
+      "F": "009185",
+      "G": "Cao su [SBR-1502] ADIDAS",
+      "H": "KÍ",
+      "I": 35,
+      "J": 145.63,
+      "K": 23,
+      "L": null,
+      "M": 122.63,
+      "days": [],
+      "AS": -145.63,
+      "AT": "SL nhỏ hơn QC cấp nguyên",
+      "AU": "OI2601482",
+      "note": "",
+      "updatedBy": "",
+      "updatedAt": "",
+      "_srcIndex": 1,
+      "_auto": true
+    },
+    {
+      "id": "rmrn7cwypthu101",
+      "A": "2026-07-16",
+      "B": "",
+      "C": "",
+      "D": "PHC",
+      "E": "OI2602489",
+      "F": "009200",
+      "G": "CHẤT TRỢ PHÂN TÁN FS-302 ADIDAS",
+      "H": "KÍ",
+      "I": 25,
+      "J": 10,
+      "K": 18.4,
+      "L": null,
+      "M": -8.399999999999999,
+      "days": [],
+      "AS": -10,
+      "AT": "SL nhỏ hơn QC cấp nguyên",
+      "AU": "OI2601482",
+      "note": "",
+      "updatedBy": "",
+      "updatedAt": "",
+      "_srcIndex": 2,
+      "_auto": true
+    }
+  ]
 }
